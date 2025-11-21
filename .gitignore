@@ -1,0 +1,43 @@
+# CocoaPods
+Pods/
+ios/Pods/
+
+# Big iOS frameworks (like opencv2)
+Frameworks/
+ML-Testing/Frameworks/
+*.framework
+
+# Xcode user-specific stuff
+xcuserdata/
+DerivedData/
+*.xcworkspace
+# CocoaPods
+Pods/
+
+# Xcode user-specific files (optional)
+xcuserdata/
+DerivedData/
+*.xcworkspace
+
+# Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Xcode user data
+xcuserdata/
+xcshareddata/
+
+# Misc
+*.ipa
+*.dSYM*Pods/
+DerivedData/ # optional but recommended
