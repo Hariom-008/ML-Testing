@@ -10,8 +10,7 @@ import Foundation
 
 import Foundation
 
-extension FaceManager {
-
+extension FaceManager{
     /// Generates enrollments.json from first 20 frames of 136-length distances
     func generateAndSaveEnrollmentsJSON() {
         let trimmedFrames = save136LengthDistanceArray()
@@ -26,7 +25,7 @@ extension FaceManager {
             distanceCount: 136,
             bitsPerDistance: QuantizationParams.default.bitsPerDistance,
             errorRate: 0.2
-        ) else {
+        )else{
             print("❌ Failed to init BCH context")
             return
         }

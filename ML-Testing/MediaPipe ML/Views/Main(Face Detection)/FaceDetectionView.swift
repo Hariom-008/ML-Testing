@@ -2,8 +2,17 @@ import SwiftUI
 import AVFoundation
 import MediaPipeTasksVision
 import Combine
+import UIKit
+import CoreImage
 
 struct FaceDetectionView: View {
+    
+    
+    //For Saving Frames of count 30
+    @State private var isSavingFrames: Bool = false
+    @State private var savedFrameCount: Int = 0
+        private let maxSavedFrames = 30
+    
     
     // ✅ CORRECT: Both created as StateObjects
     @StateObject private var faceManager: FaceManager
@@ -242,6 +251,24 @@ struct FaceDetectionView: View {
                                    .fill(Color.green)
                            )
                        }
+                        Button {
+                            savedFrameCount = 0
+                            isSavingFrames = true
+                            print("📸 Started capturing up to \(maxSavedFrames) frames...")
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("Save 30 Frames")
+                            }
+                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
+                            .padding(.horizontal, isCompact ? 16 : 24)
+                            .padding(.vertical, isCompact ? 10 : 12)
+                            .foregroundColor(.white)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.purple)
+                            )
+                        }
+
                         Spacer()
                     }
                     .padding(.horizontal, isCompact ? 12 : 16)
@@ -349,14 +376,32 @@ struct FaceDetectionView: View {
             
             debugLog("✅ FaceDetectionView appeared, callback connected")
         }
-        // NCNN frames – throttled to avoid overloading CPU/GPU
+        // NCNN frames – throttled to avoid overloading CPU/GPU & Starts saving Frames in device
         .onReceive(
             faceManager.$latestPixelBuffer
                 .compactMap { $0 }
                 .throttle(for: .milliseconds(150), scheduler: RunLoop.main, latest: true)
         ) { buffer in
+            // Existing NCNN processing
             ncnnViewModel.processFrame(buffer)
+
+            // New: Save up to 30 frames when capture is enabled
+            if isSavingFrames && savedFrameCount < maxSavedFrames {
+                let currentIndex = savedFrameCount
+                savedFrameCount += 1
+
+                // Save off the main thread
+                DispatchQueue.global(qos: .userInitiated).async {
+                    saveFrame(buffer, index: currentIndex)
+                }
+
+                if savedFrameCount == maxSavedFrames {
+                    isSavingFrames = false
+                    print("✅ Finished saving \(maxSavedFrames) frames.")
+                }
+            }
         }
+
     }
 
     @ViewBuilder
@@ -415,4 +460,33 @@ struct FaceDetectionView: View {
         )
         .shadow(color: .black.opacity(0.3), radius: 6)
     }
+    
+    // MARK: - Save camera frame to Documents as JPEG
+
+    private func saveFrame(_ pixelBuffer: CVPixelBuffer, index: Int) {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext()
+
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            print("❌ Failed to create CGImage for frame \(index)")
+            return
+        }
+
+        let uiImage = UIImage(cgImage: cgImage)
+        guard let jpegData = uiImage.jpegData(compressionQuality: 0.9) else {
+            print("❌ Failed to get JPEG data for frame \(index)")
+            return
+        }
+
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let fileURL = docs.appendingPathComponent("frame_\(index).jpg")
+
+        do {
+            try jpegData.write(to: fileURL, options: .atomic)
+            print("✅ Saved frame \(index) at: \(fileURL.path)")
+        } catch {
+            print("❌ Error saving frame \(index): \(error)")
+        }
+    }
+
 }
