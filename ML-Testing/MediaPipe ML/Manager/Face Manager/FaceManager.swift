@@ -65,7 +65,7 @@ final class FaceManager: NSObject, ObservableObject {
     var actualRightList: [(x: Float, y: Float)] = []
     
     var landmarkDistanceLists: [[Float]] = []
-    @Published var AllFramesOptionalAndMandatoryDistance: [[Float]] = []
+    @Published var AllFramesOptionalAndMandatoryDistance: [[Float]] = [[]]
     
     // MARK: - Camera Components
     var previewLayer: AVCaptureVideoPreviewLayer?

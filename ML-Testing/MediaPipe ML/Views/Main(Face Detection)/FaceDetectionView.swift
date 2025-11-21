@@ -225,6 +225,21 @@ struct FaceDetectionView: View {
                                     .fill(Color.green)
                             )
                         }
+                        Button{
+                            faceManager.printTrimmedDistances()
+                        }label: {
+                           HStack(spacing: 6) {
+                               Text("Dump JS Vector")
+                           }
+                           .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
+                           .padding(.horizontal, isCompact ? 16 : 24)
+                           .padding(.vertical, isCompact ? 10 : 12)
+                           .foregroundColor(.white)
+                           .background(
+                               RoundedRectangle(cornerRadius: 16)
+                                   .fill(Color.green)
+                           )
+                       }
                         Spacer()
                     }
                     .padding(.horizontal, isCompact ? 12 : 16)

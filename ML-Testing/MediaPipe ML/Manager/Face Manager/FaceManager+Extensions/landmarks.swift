@@ -32,10 +32,11 @@ extension FaceManager {
         return acosf(cosAngle)
     }
     
-    /// Round to 4 decimal places like Android
+    /// Proper rounding to 4 decimal places
     @inline(__always)
     private func round4(_ x: Float) -> Float {
-        return Float(Int(x * 10000)) / 10000
+        let factor: Float = 10_000  // 10^4
+        return (x * factor).rounded() / factor
     }
     
     /// NEW: Calculate pattern matching Android's exact logic
@@ -85,7 +86,7 @@ extension FaceManager {
         
         allDistances.append(round4(dRef))
         
-        print("📏 Reference distance (33-263): \(dRef)")
+        print("📏 Reference distance (33-263): \(round4(dRef))")
         
         // Safety check
         guard dRef > 1e-6 else {
