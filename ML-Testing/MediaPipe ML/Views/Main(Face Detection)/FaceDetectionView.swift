@@ -226,10 +226,12 @@ struct FaceDetectionView: View {
                             )
                         }
                         Button{
-                            faceManager.printTrimmedDistances()
+                            // After you have collected enough frames and AllFramesOptionalAndMandatoryDistance is filled:
+                            faceManager.generateAndSaveEnrollmentsJSON()
+
                         }label: {
                            HStack(spacing: 6) {
-                               Text("Dump JS Vector")
+                               Text("Generate Enrollment")
                            }
                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
                            .padding(.horizontal, isCompact ? 16 : 24)
