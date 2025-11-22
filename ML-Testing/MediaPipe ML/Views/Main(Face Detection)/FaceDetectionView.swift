@@ -403,12 +403,6 @@ struct FaceDetectionView: View {
         }
 
     }
-
-    @ViewBuilder
-    private func phoneNumberInputOverlay(isCompact: Bool) -> some View {
-        EmptyView()
-    }
-    
     private func instructionRow(icon: String, text: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)

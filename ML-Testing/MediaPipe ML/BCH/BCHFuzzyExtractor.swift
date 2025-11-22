@@ -16,10 +16,10 @@ final class BCHFuzzyExtractor {
     private(set) var layout: Layout
     private var ctx: UnsafeMutablePointer<bch_control>?
 
-    /// distanceCount = 136, bitsPerDistance = 8, errorRate = 0.2 (same as JS)
+    /// distanceCount = 136, bitsPerDistance = 8, errorRate = 0.21 (same as JS)
     init?(distanceCount: Int,
           bitsPerDistance: Int,
-          errorRate: Double = 0.2,
+          errorRate: Double = 0.21,
           primPoly: UInt32 = 0) {
 
         let requestedBits = distanceCount * bitsPerDistance

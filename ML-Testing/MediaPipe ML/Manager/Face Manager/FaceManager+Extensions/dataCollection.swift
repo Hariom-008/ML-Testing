@@ -33,9 +33,7 @@ extension FaceManager {
         
         // Reset liveness
         isFaceReal = false
-        
-        // Reset phone number
-        FaceOwnerPhoneNumber = "+91"
+
         hasEnteredPhoneNumber = false
         
         print("🔄 Reset complete - ready for new user")
