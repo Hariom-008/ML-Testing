@@ -131,11 +131,6 @@ struct FaceDetectionView: View {
                         }
                     }
                     .padding(.horizontal,12)
-                    
-                    HStack {
-                        Spacer()
-                        BrightnessControlView()
-                    }
                     Spacer()
                 }
                 
@@ -372,6 +367,7 @@ struct FaceDetectionView: View {
             // ✅ Load models
             ncnnViewModel.loadModels()
             
+            UIScreen.main.brightness = 0.9
             // ✅ Set up the callback to update FaceManager
             ncnnViewModel.onLivenessUpdated = { [weak faceManager] score in
                 faceManager?.updateFaceLivenessScore(score)
