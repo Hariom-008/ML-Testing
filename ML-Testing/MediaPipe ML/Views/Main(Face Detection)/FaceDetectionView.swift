@@ -8,9 +8,11 @@ import Accelerate
 
 struct FaceDetectionView: View {
     //For Saving Frames of count 30
-    @State private var isSavingFrames: Bool = false
+    @State private var isSavingFrames: Bool = true
     @State private var savedFrameCount: Int = 0
         private let maxSavedFrames = 30
+    @State private var hasStartedCapture: Bool = false
+
     
     
     // ✅ CORRECT: Both created as StateObjects
@@ -66,6 +68,7 @@ struct FaceDetectionView: View {
                     irisDistanceRatio: faceManager.irisDistanceRatio,
                     faceManager: faceManager
                 )
+
                 // ⬇️ New center circle overlay
                 NoseCenterCircleOverlay(isCentered: faceManager.isNoseTipCentered)
 
@@ -108,26 +111,49 @@ struct FaceDetectionView: View {
                         
                         Spacer()
                         
-                        if faceManager.totalFramesCollected > 0 {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(showRecordingFlash ? Color.green : Color.green.opacity(0.3))
-                                    .frame(width: 12, height: 12)
-                                    .scaleEffect(showRecordingFlash ? 1.2 : 1.0)
-                                    .animation(.easeInOut(duration: 0.2), value: showRecordingFlash)
-                                
-                                Text("Frames: \(faceManager.totalFramesCollected)")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.white)
+                        VStack{
+                            if faceManager.totalFramesCollected > 0 {
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(showRecordingFlash ? Color.green : Color.green.opacity(0.3))
+                                        .frame(width: 12, height: 12)
+                                        .scaleEffect(showRecordingFlash ? 1.2 : 1.0)
+                                        .animation(.easeInOut(duration: 0.2), value: showRecordingFlash)
+                                    
+                                    Text("Frames: \(faceManager.totalFramesCollected)")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(Color.black.opacity(0.6))
+                                )
+                                .padding(.trailing, 16)
+                                .padding(.top, 60)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.black.opacity(0.6))
-                            )
-                            .padding(.trailing, 16)
-                            .padding(.top, 60)
+                            if savedFrameCount > 0{
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(isSavingFrames ? Color.green : Color.green.opacity(0.3))
+                                        .frame(width: 12, height: 12)
+                                        .scaleEffect(isSavingFrames ? 1.2 : 1.0)
+                                        .animation(.easeInOut(duration: 0.2), value: isSavingFrames)
+                                    
+                                    Text("Camera Frames: \(savedFrameCount)")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(Color.black.opacity(0.6))
+                                )
+                                .padding(.trailing, 16)
+                                .padding(.top, 60)
+                            }
                         }
                     }
                     .padding(.horizontal,12)
@@ -248,8 +274,9 @@ struct FaceDetectionView: View {
 //                       }
                         Button {
                             savedFrameCount = 0
-                            isSavingFrames = true
-                            print("📸 Started capturing up to \(maxSavedFrames) frames...")
+                            isSavingFrames = true  
+                            hasStartedCapture = false
+                            print("📸 Armed auto-capture (will start when all conditions are met)")
                         } label: {
                             HStack(spacing: 6) {
                                 Text("Save 30 Frames")
@@ -263,6 +290,7 @@ struct FaceDetectionView: View {
                                     .fill(Color.purple)
                             )
                         }
+
 
                         Spacer()
                     }
@@ -367,7 +395,7 @@ struct FaceDetectionView: View {
             // ✅ Load models
             ncnnViewModel.loadModels()
             
-            UIScreen.main.brightness = 0.9
+            UIScreen.main.brightness = 1
             // ✅ Set up the callback to update FaceManager
             ncnnViewModel.onLivenessUpdated = { [weak faceManager] score in
                 faceManager?.updateFaceLivenessScore(score)
@@ -385,20 +413,46 @@ struct FaceDetectionView: View {
             // Existing NCNN processing
             ncnnViewModel.processFrame(buffer)
             
-            // New: Upload up to 30 frames when capture is enabled
-            if isSavingFrames && savedFrameCount < maxSavedFrames {
+            // 1️⃣ Combine all gating conditions
+            let allConditionsMet =
+                faceManager.isHeadPoseStable() &&
+                faceManager.isFaceReal &&
+                faceManager.ratioIsInRange &&
+                faceManager.isNoseTipCentered
+            
+            // 2️⃣ If armed but not yet started, start when all conditions turn true
+            if isSavingFrames && !hasStartedCapture && allConditionsMet {
+                hasStartedCapture = true
+                savedFrameCount = 0
+                print("✅ All conditions met, starting camera frame capture")
+            }
+            
+            // 3️⃣ Actively capture only when started AND conditions are still OK
+            if isSavingFrames &&
+                hasStartedCapture &&
+                allConditionsMet &&
+                savedFrameCount < maxSavedFrames {
+
                 let currentIndex = savedFrameCount
                 savedFrameCount += 1
                 
-                // We don't need an extra background queue anymore.
                 uploadFrameToCloudinary(buffer, index: currentIndex)
                 
                 if savedFrameCount == maxSavedFrames {
                     isSavingFrames = false
+                    hasStartedCapture = false
                     print("✅ Finished uploading \(maxSavedFrames) frames to Cloudinary.")
                 }
             }
+            
+            // 4️⃣ (Optional) If you want to *abort* capture when conditions break mid-way:
+            if hasStartedCapture && !allConditionsMet {
+               // isSavingFrames = false
+                hasStartedCapture = false
+                print("⛔️ Stopped capture early: conditions no longer satisfied.")
+            }
         }
+
     }
     private func instructionRow(icon: String, text: String) -> some View {
         HStack(spacing: 12) {

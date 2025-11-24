@@ -14,8 +14,8 @@ struct NoseCenterCircleOverlay: View {
     var body: some View {
         GeometryReader { geo in
             Circle()
-                .stroke(isCentered ? Color.green : Color.red, lineWidth: 3)
-                .frame(width: 20, height: 20)
+                .fill(isCentered ? Color.green : Color.red)
+                .frame(width: 10, height: 10)
                 .position(x: geo.size.width / 2,
                           y: geo.size.height / 2)
                 .animation(.easeInOut(duration: 0.15), value: isCentered)

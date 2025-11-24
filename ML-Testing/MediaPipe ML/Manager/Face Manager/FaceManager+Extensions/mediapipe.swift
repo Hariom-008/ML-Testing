@@ -106,15 +106,15 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
             }
             
             // Head pose estimation
-//            if let (pitch, yaw, roll) = self.computeAngles(from: self.NormalizedPoints) {
-//                self.Pitch = pitch
-//                self.Yaw = yaw
-//                self.Roll = roll
-//            } else {
-//                self.Pitch = 0
-//                self.Yaw = 0
-//                self.Roll = 0
-//            }
+            if let (pitch, yaw, roll) = self.computeAngles(from: self.NormalizedPoints) {
+                self.Pitch = pitch
+                self.Yaw = yaw
+                self.Roll = roll
+            } else {
+                self.Pitch = 0
+                self.Yaw = 0
+                self.Roll = 0
+            }
             
             // ✅ ALWAYS calculate pattern (conditions checked inside function)
             // Calculate Keypoint Distance, Curvature and Angles and then find Feature vector before PCD & LDA

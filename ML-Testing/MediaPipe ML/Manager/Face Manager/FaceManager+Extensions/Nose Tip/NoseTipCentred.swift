@@ -38,7 +38,7 @@ extension FaceManager{
 //
 //        isNoseTipCentered = distPix <= pixelRadius
 //    }
-    func updateNoseTipCenterStatusFromCalcCoords(tolerance: Float = 0.1) {
+    func updateNoseTipCenterStatusFromCalcCoords(tolerance: Float = 0.2) {
         guard NormalizedPoints.count > 4 else {
             isNoseTipCentered = false
             return
