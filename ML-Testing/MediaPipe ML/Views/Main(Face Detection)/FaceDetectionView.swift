@@ -7,8 +7,6 @@ import CoreImage
 import Accelerate
 
 struct FaceDetectionView: View {
-    
-    
     //For Saving Frames of count 30
     @State private var isSavingFrames: Bool = false
     @State private var savedFrameCount: Int = 0
@@ -68,7 +66,9 @@ struct FaceDetectionView: View {
                     irisDistanceRatio: faceManager.irisDistanceRatio,
                     faceManager: faceManager
                 )
-                
+                // ⬇️ New center circle overlay
+                NoseCenterCircleOverlay(isCentered: faceManager.isNoseTipCentered)
+
                 // 👁️ Gaze vector overlay (visible after Stop)
                 if faceManager.isMovementTracking {
                     GazeVectorCard(
@@ -219,39 +219,38 @@ struct FaceDetectionView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(isCompact ? 8 : 10)
                         }
-                        
-                        Button {
-                            onComplete()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("Scan Complete")
-                            }
-                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                            .padding(.horizontal, isCompact ? 16 : 24)
-                            .padding(.vertical, isCompact ? 10 : 12)
-                            .foregroundColor(.white)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.green)
-                            )
-                        }
-                        Button{
-                            // After you have collected enough frames and AllFramesOptionalAndMandatoryDistance is filled:
-                           // faceManager.generateAndSaveEnrollmentsJSON()
-
-                        }label: {
-                           HStack(spacing: 6) {
-                               Text("Generate Enrollment")
-                           }
-                           .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                           .padding(.horizontal, isCompact ? 16 : 24)
-                           .padding(.vertical, isCompact ? 10 : 12)
-                           .foregroundColor(.white)
-                           .background(
-                               RoundedRectangle(cornerRadius: 16)
-                                   .fill(Color.green)
-                           )
-                       }
+//                        Button {
+//                            onComplete()
+//                        } label: {
+//                            HStack(spacing: 6) {
+//                                Text("Scan Complete")
+//                            }
+//                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
+//                            .padding(.horizontal, isCompact ? 16 : 24)
+//                            .padding(.vertical, isCompact ? 10 : 12)
+//                            .foregroundColor(.white)
+//                            .background(
+//                                RoundedRectangle(cornerRadius: 16)
+//                                    .fill(Color.green)
+//                            )
+//                        }
+//                        Button{
+//                            // After you have collected enough frames and AllFramesOptionalAndMandatoryDistance is filled:
+//                           // faceManager.generateAndSaveEnrollmentsJSON()
+//
+//                        }label: {
+//                           HStack(spacing: 6) {
+//                               Text("Generate Enrollment")
+//                           }
+//                           .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
+//                           .padding(.horizontal, isCompact ? 16 : 24)
+//                           .padding(.vertical, isCompact ? 10 : 12)
+//                           .foregroundColor(.white)
+//                           .background(
+//                               RoundedRectangle(cornerRadius: 16)
+//                                   .fill(Color.green)
+//                           )
+//                       }
                         Button {
                             savedFrameCount = 0
                             isSavingFrames = true
@@ -278,33 +277,33 @@ struct FaceDetectionView: View {
                     Spacer()
                         .frame(maxHeight: isCompact ? 16 : 24)
                     
-                    // Overlays Section (graphs + normalized points)
-                    if !hideOverlays {
-                        if isCompact {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 20) {
-                                    overlayCards(
-                                        screenWidth: screenWidth,
-                                        screenHeight: screenHeight,
-                                        isCompact: true
-                                    )
-                                }
-                                .padding(.leading, 20)
-                            }
-                            .frame(height: min(screenHeight * 0.3, 220))
-                        } else {
-                            HStack(spacing: 16) {
-                                Spacer()
-                                overlayCards(
-                                    screenWidth: screenWidth,
-                                    screenHeight: screenHeight,
-                                    isCompact: false
-                                )
-                            }
-                            .padding(.horizontal, 16)
-                        }
-                    }
-                    
+//                    // Overlays Section (graphs + normalized points)
+//                    if !hideOverlays {
+//                        if isCompact {
+//                            ScrollView(.horizontal, showsIndicators: false) {
+//                                HStack(spacing: 20) {
+//                                    overlayCards(
+//                                        screenWidth: screenWidth,
+//                                        screenHeight: screenHeight,
+//                                        isCompact: true
+//                                    )
+//                                }
+//                                .padding(.leading, 20)
+//                            }
+//                            .frame(height: min(screenHeight * 0.3, 220))
+//                        } else {
+//                            HStack(spacing: 16) {
+//                                Spacer()
+//                                overlayCards(
+//                                    screenWidth: screenWidth,
+//                                    screenHeight: screenHeight,
+//                                    isCompact: false
+//                                )
+//                            }
+//                            .padding(.horizontal, 16)
+//                        }
+//                    }
+//                    
                     Spacer()
                         .frame(height: isCompact ? 12 : 24)
                 }
@@ -338,6 +337,9 @@ struct FaceDetectionView: View {
                     rollSeries = r
                 }
             }
+            .onReceive(faceManager.$NormalizedPoints) { _ in
+                faceManager.updateNoseTipCenterStatusFromCalcCoords()
+        }
             // Trigger flash animation when new frame is recorded
             .onChange(of: faceManager.frameRecordedTrigger) { _ in
                 showRecordingFlash = true
@@ -377,6 +379,7 @@ struct FaceDetectionView: View {
             
             debugLog("✅ FaceDetectionView appeared, callback connected")
         }
+        
         // NCNN frames – throttled to avoid overloading CPU/GPU & Starts saving Frames in device
         .onReceive(
             faceManager.$latestPixelBuffer
@@ -385,24 +388,21 @@ struct FaceDetectionView: View {
         ) { buffer in
             // Existing NCNN processing
             ncnnViewModel.processFrame(buffer)
-
-            // New: Save up to 30 frames when capture is enabled
+            
+            // New: Upload up to 30 frames when capture is enabled
             if isSavingFrames && savedFrameCount < maxSavedFrames {
                 let currentIndex = savedFrameCount
                 savedFrameCount += 1
-
-                // Save off the main thread
-                DispatchQueue.global(qos: .userInitiated).async {
-                    saveFrame(buffer, index: currentIndex)
-                }
-
+                
+                // We don't need an extra background queue anymore.
+                uploadFrameToCloudinary(buffer, index: currentIndex)
+                
                 if savedFrameCount == maxSavedFrames {
                     isSavingFrames = false
-                    print("✅ Finished saving \(maxSavedFrames) frames.")
+                    print("✅ Finished uploading \(maxSavedFrames) frames to Cloudinary.")
                 }
             }
         }
-
     }
     private func instructionRow(icon: String, text: String) -> some View {
         HStack(spacing: 12) {
@@ -483,5 +483,37 @@ struct FaceDetectionView: View {
             print("❌ Error saving frame \(index): \(error)")
         }
     }
+    // Optional: keep URLs if you want them later
+    // @State private var cloudinaryFrameURLs: [String] = []
+
+    // MARK: - Upload camera frame to Cloudinary as JPEG
+    private func uploadFrameToCloudinary(_ pixelBuffer: CVPixelBuffer, index: Int) {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext()
+
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            print("❌ Failed to create CGImage for frame \(index)")
+            return
+        }
+
+        let uiImage = UIImage(cgImage: cgImage)
+
+        // Launch an async task to call the async Cloudinary uploader
+        Task {
+            do {
+                let urlString = try await CloudinaryManager.shared.uploadImage(uiImage)
+                print("✅ [Cloudinary] Uploaded frame \(index): \(urlString)")
+
+                // If you need to store URLs in state:
+                // await MainActor.run {
+                //     cloudinaryFrameURLs.append(urlString)
+                // }
+
+            } catch {
+                print("❌ [Cloudinary] Failed to upload frame \(index): \(error)")
+            }
+        }
+    }
+
 
 }

@@ -7,7 +7,7 @@ import Foundation
 import SwiftUI
 
 /// Main FaceManager class - Coordinates all face detection and tracking functionality
-final class FaceManager: NSObject, ObservableObject {
+final class FaceManager: NSObject, ObservableObject{
     
     // MARK: - Dependencies
     let cameraSpecManager: CameraSpecManager
@@ -68,6 +68,10 @@ final class FaceManager: NSObject, ObservableObject {
     @Published var rawFeatures: [[Float]] = [[]]
     @Published var FeatureVector: [[Float]] = [[]]
     @Published var FeatureVectorBeforePCAAndLDA:[[Float]] = [[]]
+    
+    // Nose tip Centre
+    @Published var isNoseTipCentered: Bool = false
+
     
     // MARK: - Camera Components
     var previewLayer: AVCaptureVideoPreviewLayer?
