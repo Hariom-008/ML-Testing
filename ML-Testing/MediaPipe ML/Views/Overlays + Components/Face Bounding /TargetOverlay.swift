@@ -11,8 +11,8 @@ struct FixedTargetOvalOverlay: View {
             let w = geometry.size.width
             let h = geometry.size.height
 
-            let ovalWidthScreen  = w * 0.75
-            let ovalHeightScreen = ovalWidthScreen * 1.25
+            let ovalWidthScreen  = w * 0.70
+            let ovalHeightScreen = ovalWidthScreen * 1.20
 
             let centerX = w / 2.0
             let centerY = h / 2.0

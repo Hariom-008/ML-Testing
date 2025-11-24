@@ -12,9 +12,6 @@ struct FaceDetectionView: View {
     @State private var savedFrameCount: Int = 0
         private let maxSavedFrames = 30
     @State private var hasStartedCapture: Bool = false
-
-    
-    
     // ✅ CORRECT: Both created as StateObjects
     @StateObject private var faceManager: FaceManager
     @StateObject private var cameraSpecManager: CameraSpecManager
@@ -84,6 +81,7 @@ struct FaceDetectionView: View {
 
                 // 📊 Top-right: frames indicator + brightness + liveness
                 VStack {
+
                     HStack {
                         HStack(spacing: 8) {
                             Circle()
@@ -231,6 +229,8 @@ struct FaceDetectionView: View {
                         
                         Button {
                             faceManager.resetForNewUser()
+                            savedFrameCount = 0
+                            hasStartedCapture = false
                         } label: {
                             Text("Reset")
                                 .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
@@ -274,12 +274,11 @@ struct FaceDetectionView: View {
 //                       }
                         Button {
                             savedFrameCount = 0
-                            isSavingFrames = true  
                             hasStartedCapture = false
                             print("📸 Armed auto-capture (will start when all conditions are met)")
                         } label: {
                             HStack(spacing: 6) {
-                                Text("Save 30 Frames")
+                                Text("New Camera Frames")
                             }
                             .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
                             .padding(.horizontal, isCompact ? 16 : 24)
@@ -533,9 +532,6 @@ struct FaceDetectionView: View {
             print("❌ Error saving frame \(index): \(error)")
         }
     }
-    // Optional: keep URLs if you want them later
-    // @State private var cloudinaryFrameURLs: [String] = []
-
     // MARK: - Upload camera frame to Cloudinary as JPEG
     private func uploadFrameToCloudinary(_ pixelBuffer: CVPixelBuffer, index: Int) {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
@@ -553,12 +549,6 @@ struct FaceDetectionView: View {
             do {
                 let urlString = try await CloudinaryManager.shared.uploadImage(uiImage)
                 print("✅ [Cloudinary] Uploaded frame \(index): \(urlString)")
-
-                // If you need to store URLs in state:
-                // await MainActor.run {
-                //     cloudinaryFrameURLs.append(urlString)
-                // }
-
             } catch {
                 print("❌ [Cloudinary] Failed to upload frame \(index): \(error)")
             }
