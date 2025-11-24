@@ -17,6 +17,10 @@ final class BCHFuzzyExtractor {
     private var ctx: UnsafeMutablePointer<bch_control>?
 
     /// distanceCount = 136, bitsPerDistance = 8, errorRate = 0.21 (same as JS)
+    ///  101 * 8 = 808
+    ///    80%
+    ///    0.21
+    ///    out of 808 - 169 or 170
     init?(distanceCount: Int,
           bitsPerDistance: Int,
           errorRate: Double = 0.21,

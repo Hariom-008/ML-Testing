@@ -14,7 +14,8 @@ extension FaceManager {
     /// Resets all collected data and tracking states for a new user
     /// Clears calibration data, collected frames, and resets all flags
     func resetForNewUser() {
-        AllFramesOptionalAndMandatoryDistance.removeAll()
+        rawFeatures.removeAll()
+        
         totalFramesCollected = 0
         
         // Clear calibration data
@@ -43,9 +44,10 @@ extension FaceManager {
     
     /// Returns the current collected 316-dim pattern data
     /// Each element is a frame containing 316 distance measurements
-    func getCollectedPatternData() -> [[Float]] {
-        return AllFramesOptionalAndMandatoryDistance
-    }
+    /// 
+//    func getCollectedPatternData() -> [[Float]] {
+//        return AllFramesOptionalAndMandatoryDistance
+//    }
     
     /// Returns the number of frames collected that passed liveness checks
     func getValidFrameCount() -> Int {

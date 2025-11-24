@@ -4,6 +4,7 @@ import MediaPipeTasksVision
 import Combine
 import UIKit
 import CoreImage
+import Accelerate
 
 struct FaceDetectionView: View {
     
@@ -236,7 +237,7 @@ struct FaceDetectionView: View {
                         }
                         Button{
                             // After you have collected enough frames and AllFramesOptionalAndMandatoryDistance is filled:
-                            faceManager.generateAndSaveEnrollmentsJSON()
+                           // faceManager.generateAndSaveEnrollmentsJSON()
 
                         }label: {
                            HStack(spacing: 6) {

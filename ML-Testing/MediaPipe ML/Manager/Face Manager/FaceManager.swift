@@ -64,7 +64,10 @@ final class FaceManager: NSObject, ObservableObject {
     var actualRightList: [(x: Float, y: Float)] = []
     
     var landmarkDistanceLists: [[Float]] = []
-    @Published var AllFramesOptionalAndMandatoryDistance: [[Float]] = [[]]
+    
+    @Published var rawFeatures: [[Float]] = [[]]
+    @Published var FeatureVector: [[Float]] = [[]]
+    @Published var FeatureVectorBeforePCAAndLDA:[[Float]] = [[]]
     
     // MARK: - Camera Components
     var previewLayer: AVCaptureVideoPreviewLayer?
@@ -84,42 +87,6 @@ final class FaceManager: NSObject, ObservableObject {
         176, 149, 150, 136, 172, 58, 132, 93, 234, 127,
         162, 21, 54, 103, 67, 109
     ]
-    
-    let midLineMandatoryLandmarks = [2, 4, 9]
-    let leftMandatoryLandmarks = [70, 107, 46, 55, 33, 133, 98]
-    let rightMandatoryLandmarks = [300, 336, 276, 285, 263, 362, 327]
-    let mandatoryLandmarkPoints = [2, 4, 9, 70, 107, 46, 55, 33, 133, 98, 300, 336, 276, 285, 263, 362, 327]
-    let selectedOptionalLandmarks = [423, 357, 349, 347, 340, 266, 330, 427, 280, 203]
-    let optionalLandmarks = [423, 357, 349, 347, 340, 266, 330, 427, 280, 203, 128, 120, 118, 111, 36, 101, 207, 50, 187, 147, 411, 376, 336, 107, 351, 399, 429, 363, 134, 209, 174, 122, 151, 69, 299, 63, 156, 293, 383]
-    
-    // ✅ NEW: Angle triples from Android code
-    let angleTriples: [(Int, Int, Int)] = [
-        (70, 4, 300), (107, 4, 336), (46, 4, 276), (55, 4, 285),
-        (33, 4, 263), (133, 4, 362), (98, 4, 327),
-        
-        (33, 4, 70), (300, 4, 263), (33, 4, 107), (336, 4, 263),
-        (33, 4, 46), (276, 4, 263), (33, 4, 55), (285, 4, 263),
-        (33, 4, 33), (263, 4, 263), (33, 4, 133), (362, 4, 263),
-        (33, 4, 98), (327, 4, 263),
-        
-        (9, 70, 300), (9, 107, 336), (9, 46, 276), (9, 55, 285),
-        (9, 33, 263), (9, 133, 362), (9, 98, 327),
-        
-        (300, 4, 336), (300, 4, 276), (300, 4, 285),
-        (300, 4, 263), (300, 4, 362), (300, 4, 327),
-        
-        (336, 4, 276), (336, 4, 285), (336, 4, 263),
-        (336, 4, 362), (336, 4, 327),
-        
-        (276, 4, 285), (276, 4, 263), (276, 4, 362), (276, 4, 327),
-        
-        (285, 4, 263), (285, 4, 362), (285, 4, 327),
-        
-        (263, 4, 362), (263, 4, 327),
-        
-        (362, 4, 327)
-    ]
-    
     
     let keypoint_pair_sets = [
            //     # Set 1

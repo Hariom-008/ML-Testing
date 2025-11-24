@@ -57,7 +57,7 @@ extension FaceManager {
         return (pitch, yaw, roll)
     }
     
-    /// Computes angles from normalized landmarks (indices 4, 33, 263)
+    // Computes angles from normalized landmarks (indices 4, 33, 263)
     func computeAngles(from landmarks: [(x: Float, y: Float)]) -> (pitch: Float, yaw: Float, roll: Float)? {
         let needed = [4, 33, 263]
         guard needed.allSatisfy({ $0 < landmarks.count }) else { return nil }
