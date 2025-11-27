@@ -8,8 +8,8 @@
 import Foundation
 extension FaceManager {
     
-    /// Returns up to 20 frames, each trimmed to first 136 values
-    func save136LengthDistanceArray() -> [[Float]] {
+    /// Returns up to 20 frames, each trimmed to first 316 values
+    func save316LengthDistanceArray() -> [[Float]] {
         // Require at least 20 frames collected
         guard AllFramesOptionalAndMandatoryDistance.count >= 20 else {
             print("⚠️ Not enough frames. Have \(AllFramesOptionalAndMandatoryDistance.count), need at least 20.")
@@ -19,17 +19,17 @@ extension FaceManager {
         // Take first 20 frames
         let first20Frames = Array(AllFramesOptionalAndMandatoryDistance.prefix(20))
         
-        // For each frame, keep only first 136 values
+        // For each frame, keep only first 316 values
         let trimmed = first20Frames.map { frame -> [Float] in
-            Array(frame.prefix(136))
+            Array(frame.prefix(316))
         }
         
         return trimmed
     }
     
-    /// Prints the trimmed arrays (20 arrays × 136 values)
+    /// Prints the trimmed arrays (20 arrays × 316 values)
     func printTrimmedDistances() {
-        let trimmed = save136LengthDistanceArray()
+        let trimmed = save316LengthDistanceArray()
         
         guard !trimmed.isEmpty else {
             print("❌ No trimmed distances to print.")

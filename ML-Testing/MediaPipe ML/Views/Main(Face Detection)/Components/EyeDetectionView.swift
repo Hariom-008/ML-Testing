@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-import AVFoundation
+internal import AVFoundation
 import MediaPipeTasksVision
 import Combine
 import UIKit

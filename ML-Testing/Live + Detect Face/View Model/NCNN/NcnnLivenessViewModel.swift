@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 import SwiftUI
-import AVFoundation
+internal import AVFoundation
 import MediaPipeTasksVision
 
 class NcnnLivenessViewModel: ObservableObject {

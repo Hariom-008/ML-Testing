@@ -11,18 +11,18 @@ import Foundation
 import Foundation
 
 extension FaceManager{
-    /// Generates enrollments.json from first 20 frames of 136-length distances
+    /// Generates enrollments.json from first 20 frames of 316-length distances
     func generateAndSaveEnrollmentsJSON() {
-        let trimmedFrames = save136LengthDistanceArray()
+        let trimmedFrames = save316LengthDistanceArray()
 
         guard !trimmedFrames.isEmpty else {
             print("❌ No trimmed frames for enrollment.")
             return
         }
 
-        // BCH context: distanceCount=136, bitsPerDistance=8, errorRate=0.2 (same as Node)
+        // BCH context: distanceCount=316, bitsPerDistance=8, errorRate=0.2 (same as Node)
         guard let bch = BCHFuzzyExtractor(
-            distanceCount: 136,
+            distanceCount: 316,
             bitsPerDistance: QuantizationParams.default.bitsPerDistance,
             errorRate: 0.2
         )else{

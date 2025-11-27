@@ -1,5 +1,5 @@
 import SwiftUI
-import AVFoundation
+internal import AVFoundation
 
 struct MediapipeCameraPreviewView: UIViewRepresentable {
     let faceManager: FaceManager

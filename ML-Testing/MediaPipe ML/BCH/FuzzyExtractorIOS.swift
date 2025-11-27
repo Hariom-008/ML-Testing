@@ -20,7 +20,7 @@ struct QuantizationParams {
     )
 }
 
-struct EnrollmentRecord: Codable {
+struct EnrollmentRecord: Codable{
     let index: Int
     let helper: String
     let hashHex: String
@@ -162,8 +162,8 @@ enum FuzzyExtractorIOS {
                                    distances: [Float],
                                    bch: BCHFuzzyExtractor,
                                    quantParams: QuantizationParams = .default) -> EnrollmentRecord? {
-        guard distances.count == 136 else {
-            print("❌ generateEnrollment: expected 136 distances, got \(distances.count)")
+        guard distances.count == 316 else {
+            print("❌ generateEnrollment: expected 316 distances, got \(distances.count)")
             return nil
         }
 

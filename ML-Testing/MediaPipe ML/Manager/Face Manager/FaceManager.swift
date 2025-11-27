@@ -1,4 +1,4 @@
-import AVFoundation
+internal import AVFoundation
 import UIKit
 import MediaPipeTasksVision
 import Combine
@@ -54,6 +54,8 @@ final class FaceManager: NSObject, ObservableObject {
     // MARK: - Internal Calculation Buffers
     var CameraFeedCoordinates: [(x: Float, y: Float)] = []
     var CalculationCoordinates: [(x: Float, y: Float)] = []
+    var ScreenCoordinates:[(x: CGFloat, y: CGFloat)] = []
+    
     var centroid: (x: Float, y: Float)?
     
     var Translated: [(x: Float, y: Float)] = []

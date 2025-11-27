@@ -1,5 +1,5 @@
 import SwiftUI
-import AVFoundation
+internal import AVFoundation
 import MediaPipeTasksVision
 import Combine
 import UIKit
@@ -67,7 +67,9 @@ struct FaceDetectionView: View {
                     irisDistanceRatio: faceManager.irisDistanceRatio,
                     faceManager: faceManager
                 )
-                
+                FacePointsOverlay(faceManager: faceManager)
+                FaceOvalOverlay(faceManager: faceManager)
+
                 // 👁️ Gaze vector overlay (visible after Stop)
                 if faceManager.isMovementTracking {
                     GazeVectorCard(

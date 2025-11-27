@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import AVFoundation
+internal import AVFoundation
 import UIKit
 import MediaPipeTasksVision
 

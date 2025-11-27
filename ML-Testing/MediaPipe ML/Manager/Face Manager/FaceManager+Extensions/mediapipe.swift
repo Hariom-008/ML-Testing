@@ -1,5 +1,8 @@
 import Foundation
 import MediaPipeTasksVision
+internal import AVFoundation
+import Foundation
+import CoreGraphics
 
 // MARK: - MediaPipe Setup & Delegate
 extension FaceManager {
@@ -46,6 +49,7 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
                 guard let self = self else { return }
                 self.CameraFeedCoordinates = []
                 self.CalculationCoordinates = []
+                self.ScreenCoordinates = []
                 self.irisDistanceRatio = nil
                 self.faceBoundingBox = nil
                 self.ratioIsInRange = false
@@ -81,6 +85,26 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
             // Store coordinates
             self.CameraFeedCoordinates = coords
             self.CalculationCoordinates = calcCoords
+
+            // ✅ FIXED: Convert to screen coordinates with proper aspect-fill handling
+            // Note: Don't mirror X here - the preview layer already handles mirroring
+            if let previewLayer = self.previewLayer {
+                let cameraResolution = CGSize(width: CGFloat(frameWidth), height: CGFloat(frameHeight))
+                
+                let screenCoords: [(x: CGFloat, y: CGFloat)] = firstFace.map { lm in
+                    let screenPoint = self.convertToScreenCoordinates(
+                        normalizedX: CGFloat(lm.x),
+                        normalizedY: CGFloat(lm.y),
+                        previewLayer: previewLayer,
+                        cameraResolution: cameraResolution
+                    )
+                    return (x: screenPoint.x, y: screenPoint.y)
+                }
+
+                self.ScreenCoordinates = screenCoords
+            } else {
+                self.ScreenCoordinates = []
+            }
             
             // Geometric calculations
             self.calculateCentroidUsingFaceOval()
@@ -117,8 +141,63 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
             }
             
             // ✅ ALWAYS calculate pattern (conditions checked inside function)
-            // Don't gate by head pose here - let the function decide
             self.calculateOptionalAndMandatoryDistances()
         }
+    }
+}
+
+// MARK: - Coordinate Transformation Helper
+extension FaceManager {
+    
+    /// Converts MediaPipe normalized coordinates to screen coordinates
+    /// Accounts for: portrait orientation, mirroring, and aspect fill scaling
+    func convertToScreenCoordinates(
+        normalizedX: CGFloat,
+        normalizedY: CGFloat,
+        previewLayer: AVCaptureVideoPreviewLayer,
+        cameraResolution: CGSize
+    ) -> CGPoint {
+        
+        let previewBounds = previewLayer.bounds
+        let previewWidth = previewBounds.width
+        let previewHeight = previewBounds.height
+        
+        // Calculate the actual visible area considering aspect fill
+        let cameraAspectRatio = cameraResolution.width / cameraResolution.height
+        let previewAspectRatio = previewWidth / previewHeight
+        
+        var scaleX: CGFloat = 1.0
+        var scaleY: CGFloat = 1.0
+        var offsetX: CGFloat = 0.0
+        var offsetY: CGFloat = 0.0
+        
+        if cameraAspectRatio > previewAspectRatio {
+            // Camera is wider - fills height, crops width
+            scaleY = previewHeight / cameraResolution.height
+            scaleX = scaleY
+            
+            let scaledCameraWidth = cameraResolution.width * scaleX
+            offsetX = (previewWidth - scaledCameraWidth) / 2.0
+        } else {
+            // Camera is taller - fills width, crops height
+            scaleX = previewWidth / cameraResolution.width
+            scaleY = scaleX
+            
+            let scaledCameraHeight = cameraResolution.height * scaleY
+            offsetY = (previewHeight - scaledCameraHeight) / 2.0
+        }
+        
+        // Don't mirror here - the preview layer already handles mirroring
+        // since conn.isVideoMirrored = true in Camera.swift
+        
+        // Convert normalized [0,1] to camera pixel coordinates
+        let cameraX = normalizedX * cameraResolution.width
+        let cameraY = normalizedY * cameraResolution.height
+        
+        // Scale to screen and add offset
+        let screenX = cameraX * scaleX + offsetX
+        let screenY = cameraY * scaleY + offsetY
+        
+        return CGPoint(x: screenX, y: screenY)
     }
 }

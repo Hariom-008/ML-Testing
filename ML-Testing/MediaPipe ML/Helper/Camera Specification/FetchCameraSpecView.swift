@@ -4,7 +4,7 @@
 //
 
 import SwiftUI
-import AVFoundation
+internal import AVFoundation
 import Combine
 import CoreMedia
 import simd
@@ -50,7 +50,7 @@ struct CameraSpecs {
 
 
 import SwiftUI
-import AVFoundation
+internal import AVFoundation
 import Combine
 import CoreMedia
 import CoreVideo

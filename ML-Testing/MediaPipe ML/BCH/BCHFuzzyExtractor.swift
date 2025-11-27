@@ -16,7 +16,7 @@ final class BCHFuzzyExtractor {
     private(set) var layout: Layout
     private var ctx: UnsafeMutablePointer<bch_control>?
 
-    /// distanceCount = 136, bitsPerDistance = 8, errorRate = 0.21 (same as JS)
+    /// distanceCount = 316, bitsPerDistance = 8, errorRate = 0.21 (same as JS)
     init?(distanceCount: Int,
           bitsPerDistance: Int,
           errorRate: Double = 0.21,
@@ -64,13 +64,12 @@ final class BCHFuzzyExtractor {
         print("✅ BCH layout: m=\(layout.m), n=\(layout.n), t=\(layout.t), " +
               "requestedBits=\(layout.requestedBits), bchDataBits=\(layout.bchDataBits), eccBits=\(layout.eccBits)")
     }
-
-    deinit {
+    
+  deinit {
         if let c = ctx {
             free_bch(c)
         }
-    }
-
+  }
     var dataBits: Int { layout.requestedBits }  // 1088
     var eccBits: Int { layout.eccBits }        // 2616
 
