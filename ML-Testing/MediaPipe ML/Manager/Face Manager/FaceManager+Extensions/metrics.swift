@@ -157,7 +157,7 @@ extension FaceManager {
         var maxX = -Float.greatestFiniteMagnitude
         var maxY = -Float.greatestFiniteMagnitude
         
-        for idx in faceOvalIndices {
+        for idx in faceOvalIndices{
             guard idx >= 0, idx < CameraFeedCoordinates.count else { continue }
             let p = CameraFeedCoordinates[idx]
             minX = min(minX, p.x)
