@@ -185,6 +185,7 @@ extension FaceManager {
         
         let dIrisMm: Float = 11.5
         let LTargetMm: Float = 305.0
+        // Iris_Weight_Px = irisTarget_px && currentiris_width = d_mean_px
         let irisTarget_px = fx * (dIrisMm / LTargetMm)
         
         // ML team's formula

@@ -61,12 +61,6 @@ struct FaceDetectionView: View {
                 MediapipeCameraPreviewView(faceManager: faceManager)
                     .ignoresSafeArea()
                 
-                FixedTargetOvalOverlay(
-                    imageSize: faceManager.imageSize,
-                    screenSize: geometry.size,
-                    irisDistanceRatio: faceManager.irisDistanceRatio,
-                    faceManager: faceManager
-                )
                 FacePointsOverlay(faceManager: faceManager)
                 FaceOvalOverlay(faceManager: faceManager)
 

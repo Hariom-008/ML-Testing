@@ -51,7 +51,6 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
                 self.CalculationCoordinates = []
                 self.ScreenCoordinates = []
                 self.irisDistanceRatio = nil
-                self.faceBoundingBox = nil
                 self.ratioIsInRange = false
             }
             return
