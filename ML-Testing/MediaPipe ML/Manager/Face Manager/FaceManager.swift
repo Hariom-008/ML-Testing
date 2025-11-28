@@ -48,8 +48,16 @@ final class FaceManager: NSObject, ObservableObject {
     
     // ✅ NEW: Iris target and ratio check
     @Published var irisTargetPx: Float = 0
+    @Published var dMeanPx : Float = 0
     @Published var ratioIsInRange: Bool = false
     @Published var faceLivenessScore:Float = 0
+    
+    
+    @Published var TargetFaceOvalCoordinates:[(x: CGFloat, y: CGFloat)] = []
+    @Published var TransalatedScaledFaceOvalCoordinates :[(x:CGFloat,y:CGFloat)] = []
+    @Published var FaceOvalIsInTarget:Bool = false
+    let errorWindowPx: CGFloat = 55.0
+    
     
     // MARK: - Internal Calculation Buffers
     var CameraFeedCoordinates: [(x: Float, y: Float)] = []
@@ -148,7 +156,6 @@ final class FaceManager: NSObject, ObservableObject {
                 [(46, 53), (53, 52), (52, 65), (65, 55)],
                 [(285, 295), (295, 282), (282, 283), (283, 276)],
                 [(48, 115), (115, 220), (220, 45), (45, 4), (4, 275), (275, 440), (440, 344), (344, 278)]
-
             ]
             
            // # Define sets for curvature calculation (triples of consecutive pairs)
@@ -168,7 +175,7 @@ final class FaceManager: NSObject, ObservableObject {
                 [(46,53, 52), (53, 52, 65), (52, 65, 55)],
                 [(285, 295, 282), (295, 282, 283), (282, 283, 276)]
             ]
-            
+    
           //  # Define sets for angle calculation (triples of consecutive pairs)
             let angle_sets = [
              //   # Set 6 angle: [(33, 130), (130, 226), (226, 247)]

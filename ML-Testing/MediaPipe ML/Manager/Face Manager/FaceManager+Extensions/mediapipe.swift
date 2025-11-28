@@ -86,24 +86,31 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
             self.CalculationCoordinates = calcCoords
 
             // ✅ FIXED: Convert to screen coordinates with proper aspect-fill handling
-            // Note: Don't mirror X here - the preview layer already handles mirroring
             if let previewLayer = self.previewLayer {
-                let cameraResolution = CGSize(width: CGFloat(frameWidth), height: CGFloat(frameHeight))
-                
-                let screenCoords: [(x: CGFloat, y: CGFloat)] = firstFace.map { lm in
-                    let screenPoint = self.convertToScreenCoordinates(
-                        normalizedX: CGFloat(lm.x),
-                        normalizedY: CGFloat(lm.y),
-                        previewLayer: previewLayer,
-                        cameraResolution: cameraResolution
-                    )
-                    return (x: screenPoint.x, y: screenPoint.y)
-                }
+                   let cameraResolution = CGSize(width: CGFloat(frameWidth), height: CGFloat(frameHeight))
 
-                self.ScreenCoordinates = screenCoords
-            } else {
-                self.ScreenCoordinates = []
-            }
+                   let screenCoords: [(x: CGFloat, y: CGFloat)] = firstFace.map { lm in
+                       let screenPoint = self.convertToScreenCoordinates(
+                           normalizedX: CGFloat(lm.x),
+                           normalizedY: CGFloat(lm.y),
+                           previewLayer: previewLayer,
+                           cameraResolution: cameraResolution
+                       )
+                       return (x: screenPoint.x, y: screenPoint.y)
+                   }
+
+                   self.ScreenCoordinates = screenCoords
+
+                   // 🔥 NEW: compute target oval for this frame
+                   let bounds = previewLayer.bounds
+                   self.updateTargetFaceOvalCoordinates(
+                       screenWidth: bounds.width,
+                       screenHeight: bounds.height
+                   )
+               } else {
+                   self.ScreenCoordinates = []
+                   self.TransalatedScaledFaceOvalCoordinates.removeAll()
+               }
             
             // Geometric calculations
             self.calculateCentroidUsingFaceOval()

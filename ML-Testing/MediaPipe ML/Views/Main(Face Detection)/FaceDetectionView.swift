@@ -62,6 +62,7 @@ struct FaceDetectionView: View {
                     .ignoresSafeArea()
                 
                 FacePointsOverlay(faceManager: faceManager)
+                TargetFaceOvalOverlay(faceManager: faceManager)
                 FaceOvalOverlay(faceManager: faceManager)
 
                 // 👁️ Gaze vector overlay (visible after Stop)

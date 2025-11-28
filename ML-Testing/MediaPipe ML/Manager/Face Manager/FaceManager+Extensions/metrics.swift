@@ -132,6 +132,7 @@ extension FaceManager {
         print("🔘 Diameter of RIGHT IRIS: \(diameterRight_px)")
         
         let d_mean_px: Float = (diameterLeft_px + diameterRight_px) / 2.0
+        self.dMeanPx = d_mean_px
         guard irisTargetPx > 0 else {
             irisDistanceRatio = nil
             faceBoundingBox = nil

@@ -51,7 +51,7 @@ struct FaceOvalOverlay: View {
         // Stroke the path in blue with a thicker line
         context.stroke(
             path,
-            with: .color(.blue),
+            with: faceManager.FaceOvalIsInTarget ? .color(.green) : .color(.blue),
             lineWidth: 2.0
         )
     }
