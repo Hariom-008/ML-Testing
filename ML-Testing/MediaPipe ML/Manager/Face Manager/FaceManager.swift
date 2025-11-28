@@ -56,6 +56,9 @@ final class FaceManager: NSObject, ObservableObject {
     @Published var TargetFaceOvalCoordinates:[(x: CGFloat, y: CGFloat)] = []
     @Published var TransalatedScaledFaceOvalCoordinates :[(x:CGFloat,y:CGFloat)] = []
     @Published var FaceOvalIsInTarget:Bool = false
+    
+    @Published var currentDistanceRatio: CGFloat = 0.0
+    
     let errorWindowPx: CGFloat = 55.0
     
     

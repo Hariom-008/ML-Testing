@@ -59,11 +59,16 @@ struct FaceDetectionView: View {
                 MediapipeCameraPreviewView(faceManager: faceManager)
                     .ignoresSafeArea()
                 
+                // Face detection overlays
                 FacePointsOverlay(faceManager: faceManager)
                 TargetFaceOvalOverlay(faceManager: faceManager)
                 FaceOvalOverlay(faceManager: faceManager)
+                
+                // In your ZStack, add the new overlay:
 
-                // 👁️ Gaze vector overlay (visible after Stop)
+                DirectionalGuidanceOverlay(faceManager: faceManager)
+                
+                // Gaze vector (shown after calibration)
                 if faceManager.isMovementTracking {
                     GazeVectorCard(
                         gazeVector: faceManager.GazeVector,
@@ -72,23 +77,22 @@ struct FaceDetectionView: View {
                     .transition(.opacity.combined(with: .scale))
                     .animation(.easeInOut(duration: 0.3), value: faceManager.isMovementTracking)
                 }
-
-                // 📊 Top-right: frames indicator + brightness + liveness
+                
+                // Top indicators
                 VStack {
                     HStack {
+                        // Liveness indicator
                         HStack(spacing: 8) {
                             Circle()
                                 .fill(faceManager.isFaceReal ? Color.green : Color.red.opacity(0.7))
                                 .frame(width: 12, height: 12)
-                                .scaleEffect(showRecordingFlash ? 1.2 : 1.0)
-                                .animation(.easeInOut(duration: 0.2), value: showRecordingFlash)
                             
-                            Text(faceManager.isFaceReal ? "Real Face" : "Spoof")
+                            Text(faceManager.isFaceReal ? "Real" : "Spoof")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.white)
                             
                             Text("(\(String(format: "%.2f", faceManager.faceLivenessScore)))")
-                                .font(.system(size: 12, weight: .regular))
+                                .font(.system(size: 12))
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         .padding(.horizontal, 12)
@@ -97,39 +101,30 @@ struct FaceDetectionView: View {
                             RoundedRectangle(cornerRadius: 20)
                                 .fill(Color.black.opacity(0.6))
                         )
-                        .padding(.trailing, 16)
+                        .padding(.leading, 16)
                         .padding(.top, 60)
                         
                         Spacer()
                         
-                        if faceManager.totalFramesCollected > 0 {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(showRecordingFlash ? Color.green : Color.green.opacity(0.3))
-                                    .frame(width: 12, height: 12)
-                                    .scaleEffect(showRecordingFlash ? 1.2 : 1.0)
-                                    .animation(.easeInOut(duration: 0.2), value: showRecordingFlash)
-                                
-                                Text("Frames: \(faceManager.totalFramesCollected)")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.white)
+                        // Frame collection progress (show when saving frames)
+                        if isSavingFrames || savedFrameCount > 0 {
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    FrameCollectionProgressView(faceManager: faceManager)
+                                        .padding(.trailing, 20)
+                                        .padding(.top, 130)
+                                }
+                                Spacer()
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.black.opacity(0.6))
-                            )
-                            .padding(.trailing, 16)
-                            .padding(.top, 60)
                         }
                     }
-                    .padding(.horizontal,12)
                     
                     HStack {
                         Spacer()
                         BrightnessControlView()
                     }
+                    
                     Spacer()
                 }
                 
@@ -271,36 +266,6 @@ struct FaceDetectionView: View {
                     
                     Spacer()
                         .frame(maxHeight: isCompact ? 16 : 24)
-                    
-                    // Overlays Section (graphs + normalized points)
-//                    if !hideOverlays {
-//                        if isCompact {
-//                            ScrollView(.horizontal, showsIndicators: false) {
-//                                HStack(spacing: 20) {
-//                                    overlayCards(
-//                                        screenWidth: screenWidth,
-//                                        screenHeight: screenHeight,
-//                                        isCompact: true
-//                                    )
-//                                }
-//                                .padding(.leading, 20)
-//                            }
-//                            .frame(height: min(screenHeight * 0.3, 220))
-//                        } else {
-//                            HStack(spacing: 16) {
-//                                Spacer()
-//                                overlayCards(
-//                                    screenWidth: screenWidth,
-//                                    screenHeight: screenHeight,
-//                                    isCompact: false
-//                                )
-//                            }
-//                            .padding(.horizontal, 16)
-//                        }
-//                    }
-//                    
-//                    Spacer()
-//                        .frame(height: isCompact ? 12 : 24)
                 }
             }
             // EAR feed (cheap, per-frame is OK)
@@ -381,7 +346,7 @@ struct FaceDetectionView: View {
             ncnnViewModel.processFrame(buffer)
 
             // New: Save up to 30 frames when capture is enabled
-            if isSavingFrames && savedFrameCount < maxSavedFrames {
+            if isSavingFrames && savedFrameCount < maxSavedFrames  && faceManager.isHeadPoseStable() && faceManager.isFaceReal && faceManager.FaceOvalIsInTarget && faceManager.ratioIsInRange{
                 let currentIndex = savedFrameCount
                 savedFrameCount += 1
 
@@ -412,12 +377,42 @@ struct FaceDetectionView: View {
             Spacer()
         }
     }
-    
+    // MARK: - Save camera frame to Documents as JPEG
+
+    private func saveFrame(_ pixelBuffer: CVPixelBuffer, index: Int) {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext()
+        
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            print("❌ Failed to create CGImage for frame \(index)")
+            return
+        }
+        
+        let uiImage = UIImage(cgImage: cgImage)
+        guard let jpegData = uiImage.jpegData(compressionQuality: 0.9) else {
+            print("❌ Failed to get JPEG data for frame \(index)")
+            return
+        }
+        
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let fileURL = docs.appendingPathComponent("frame_\(index).jpg")
+        
+        do {
+            try jpegData.write(to: fileURL, options: .atomic)
+            print("✅ Saved frame \(index) at: \(fileURL.path)")
+        } catch {
+            print("❌ Error saving frame \(index): \(error)")
+        }
+    }
+}
+
+
+
 //    @ViewBuilder
 //    private func overlayCards(screenWidth: CGFloat, screenHeight: CGFloat, isCompact: Bool) -> some View {
 //        let cardWidth = isCompact ? min(screenWidth * 0.6, 240) : min(screenWidth * 0.18, 260)
 //        let cardHeight = isCompact ? min(screenHeight * 0.25, 160) : min(screenHeight * 0.22, 180)
-//        
+//
 //        PoseGraphCard(
 //            pitch: pitchSeries,
 //            yaw:   yawSeries,
@@ -449,33 +444,3 @@ struct FaceDetectionView: View {
 //        )
 //        .shadow(color: .black.opacity(0.3), radius: 6)
 //    }
-    
-    // MARK: - Save camera frame to Documents as JPEG
-
-    private func saveFrame(_ pixelBuffer: CVPixelBuffer, index: Int) {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            print("❌ Failed to create CGImage for frame \(index)")
-            return
-        }
-
-        let uiImage = UIImage(cgImage: cgImage)
-        guard let jpegData = uiImage.jpegData(compressionQuality: 0.9) else {
-            print("❌ Failed to get JPEG data for frame \(index)")
-            return
-        }
-
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let fileURL = docs.appendingPathComponent("frame_\(index).jpg")
-
-        do {
-            try jpegData.write(to: fileURL, options: .atomic)
-            print("✅ Saved frame \(index) at: \(fileURL.path)")
-        } catch {
-            print("❌ Error saving frame \(index): \(error)")
-        }
-    }
-
-}
