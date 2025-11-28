@@ -6,8 +6,6 @@ import UIKit
 import CoreImage
 
 struct FaceDetectionView: View {
-    
-    
     //For Saving Frames of count 30
     @State private var isSavingFrames: Bool = false
     @State private var savedFrameCount: Int = 0
@@ -275,34 +273,34 @@ struct FaceDetectionView: View {
                         .frame(maxHeight: isCompact ? 16 : 24)
                     
                     // Overlays Section (graphs + normalized points)
-                    if !hideOverlays {
-                        if isCompact {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 20) {
-                                    overlayCards(
-                                        screenWidth: screenWidth,
-                                        screenHeight: screenHeight,
-                                        isCompact: true
-                                    )
-                                }
-                                .padding(.leading, 20)
-                            }
-                            .frame(height: min(screenHeight * 0.3, 220))
-                        } else {
-                            HStack(spacing: 16) {
-                                Spacer()
-                                overlayCards(
-                                    screenWidth: screenWidth,
-                                    screenHeight: screenHeight,
-                                    isCompact: false
-                                )
-                            }
-                            .padding(.horizontal, 16)
-                        }
-                    }
-                    
-                    Spacer()
-                        .frame(height: isCompact ? 12 : 24)
+//                    if !hideOverlays {
+//                        if isCompact {
+//                            ScrollView(.horizontal, showsIndicators: false) {
+//                                HStack(spacing: 20) {
+//                                    overlayCards(
+//                                        screenWidth: screenWidth,
+//                                        screenHeight: screenHeight,
+//                                        isCompact: true
+//                                    )
+//                                }
+//                                .padding(.leading, 20)
+//                            }
+//                            .frame(height: min(screenHeight * 0.3, 220))
+//                        } else {
+//                            HStack(spacing: 16) {
+//                                Spacer()
+//                                overlayCards(
+//                                    screenWidth: screenWidth,
+//                                    screenHeight: screenHeight,
+//                                    isCompact: false
+//                                )
+//                            }
+//                            .padding(.horizontal, 16)
+//                        }
+//                    }
+//                    
+//                    Spacer()
+//                        .frame(height: isCompact ? 12 : 24)
                 }
             }
             // EAR feed (cheap, per-frame is OK)
@@ -415,42 +413,42 @@ struct FaceDetectionView: View {
         }
     }
     
-    @ViewBuilder
-    private func overlayCards(screenWidth: CGFloat, screenHeight: CGFloat, isCompact: Bool) -> some View {
-        let cardWidth = isCompact ? min(screenWidth * 0.6, 240) : min(screenWidth * 0.18, 260)
-        let cardHeight = isCompact ? min(screenHeight * 0.25, 160) : min(screenHeight * 0.22, 180)
-        
-        PoseGraphCard(
-            pitch: pitchSeries,
-            yaw:   yawSeries,
-            roll:  rollSeries,
-            minY: poseRange.lowerBound,
-            maxY: poseRange.upperBound
-        )
-        .frame(width: cardWidth, height: cardHeight)
-
-        EARGraphCard(
-            values: earSeries,
-            minY: earRange.lowerBound,
-            maxY: earRange.upperBound,
-            threshold: blinkThreshold
-        )
-        .frame(width: cardWidth, height: cardHeight)
-        .shadow(color: .black.opacity(0.3), radius: 6)
-
-        NormalizedPointsOverlay(
-            points: faceManager.NormalizedPoints,
-            pointSize: isCompact ? 2.5 : 3.0,
-            insetRatio: 0.12,
-            smoothingAlpha: 0.25
-        )
-        .frame(width: cardWidth, height: cardHeight)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(.white.opacity(0.2), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.3), radius: 6)
-    }
+//    @ViewBuilder
+//    private func overlayCards(screenWidth: CGFloat, screenHeight: CGFloat, isCompact: Bool) -> some View {
+//        let cardWidth = isCompact ? min(screenWidth * 0.6, 240) : min(screenWidth * 0.18, 260)
+//        let cardHeight = isCompact ? min(screenHeight * 0.25, 160) : min(screenHeight * 0.22, 180)
+//        
+//        PoseGraphCard(
+//            pitch: pitchSeries,
+//            yaw:   yawSeries,
+//            roll:  rollSeries,
+//            minY: poseRange.lowerBound,
+//            maxY: poseRange.upperBound
+//        )
+//        .frame(width: cardWidth, height: cardHeight)
+//
+//        EARGraphCard(
+//            values: earSeries,
+//            minY: earRange.lowerBound,
+//            maxY: earRange.upperBound,
+//            threshold: blinkThreshold
+//        )
+//        .frame(width: cardWidth, height: cardHeight)
+//        .shadow(color: .black.opacity(0.3), radius: 6)
+//
+//        NormalizedPointsOverlay(
+//            points: faceManager.NormalizedPoints,
+//            pointSize: isCompact ? 2.5 : 3.0,
+//            insetRatio: 0.12,
+//            smoothingAlpha: 0.25
+//        )
+//        .frame(width: cardWidth, height: cardHeight)
+//        .overlay(
+//            RoundedRectangle(cornerRadius: 12)
+//                .stroke(.white.opacity(0.2), lineWidth: 1)
+//        )
+//        .shadow(color: .black.opacity(0.3), radius: 6)
+//    }
     
     // MARK: - Save camera frame to Documents as JPEG
 
