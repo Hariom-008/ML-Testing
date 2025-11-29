@@ -65,7 +65,7 @@ struct FaceDetectionView: View {
                 FaceOvalOverlay(faceManager: faceManager)
                 
                 // In your ZStack, add the new overlay:
-
+                
                 DirectionalGuidanceOverlay(faceManager: faceManager)
                 
                 // Gaze vector (shown after calibration)
@@ -113,53 +113,42 @@ struct FaceDetectionView: View {
                                     Spacer()
                                     FrameCollectionProgressView(faceManager: faceManager)
                                         .padding(.trailing, 20)
-                                        .padding(.top, 130)
+                                        .padding(.top, 10)
                                 }
                                 Spacer()
                             }
                         }
+                        HStack(spacing: 8) {
+                            Circle()
+                                //.fill(isSavingFrames ? Color.green : Color.red.opacity(0.7))
+                                .fill(faceManager.totalFramesCollected == 0 ? Color.gray : Color.green)
+                                .frame(width: 12, height: 12)
+                            
+                            Text("Frames")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            Text("\(faceManager.totalFramesCollected)")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.black.opacity(0.6))
+                        )
+                        .padding(.leading, 16)
+                        .padding(.top, 60)
                     }
-                    
-                    HStack {
-                        Spacer()
-                        BrightnessControlView()
-                    }
-                    
                     Spacer()
                 }
-                
+        ScrollView(.horizontal,showsIndicators: false){
                 // 🔻 Bottom overlays: controls + graphs
                 VStack(spacing: 0) {
                     Spacer()
                     Spacer()
                     
-                    // Head pose stability indicator
-                    HStack(spacing: 8) {
-                        if faceManager.isHeadPoseStable() {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 10, height: 10)
-                            Text("Head Stable")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        } else {
-                            Circle()
-                                .fill(Color.orange)
-                                .frame(width: 10, height: 10)
-                            Text("Stabilizing...")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15)
-                            .fill(Color.black.opacity(0.6))
-                    )
-                    
-                    Spacer()
-            
                     // Control buttons row
                     HStack(spacing: isCompact ? 12 : 20) {
                         Spacer()
@@ -227,20 +216,20 @@ struct FaceDetectionView: View {
                         Button{
                             // After you have collected enough frames and AllFramesOptionalAndMandatoryDistance is filled:
                             faceManager.generateAndSaveEnrollmentsJSON()
-
+                            
                         }label: {
-                           HStack(spacing: 6) {
-                               Text("Generate Enrollment")
-                           }
-                           .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                           .padding(.horizontal, isCompact ? 16 : 24)
-                           .padding(.vertical, isCompact ? 10 : 12)
-                           .foregroundColor(.white)
-                           .background(
-                               RoundedRectangle(cornerRadius: 16)
-                                   .fill(Color.green)
-                           )
-                       }
+                            HStack(spacing: 6) {
+                                Text("Generate Enrollment")
+                            }
+                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
+                            .padding(.horizontal, isCompact ? 16 : 24)
+                            .padding(.vertical, isCompact ? 10 : 12)
+                            .foregroundColor(.white)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.green)
+                            )
+                        }
                         Button {
                             savedFrameCount = 0
                             isSavingFrames = true
@@ -258,7 +247,7 @@ struct FaceDetectionView: View {
                                     .fill(Color.purple)
                             )
                         }
-
+                        
                         Spacer()
                     }
                     .padding(.horizontal, isCompact ? 12 : 16)
@@ -267,6 +256,7 @@ struct FaceDetectionView: View {
                     Spacer()
                         .frame(maxHeight: isCompact ? 16 : 24)
                 }
+            }
             }
             // EAR feed (cheap, per-frame is OK)
             .onChange(of: faceManager.EAR) { newEAR in

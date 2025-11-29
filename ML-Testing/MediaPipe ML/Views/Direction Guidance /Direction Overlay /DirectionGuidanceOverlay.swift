@@ -112,9 +112,9 @@ struct DirectionalGuidanceOverlay: View {
     private var ambientGuidanceLayer: some View {
         VStack(spacing: 0) {
             // Top instruction card
-            topInstructionCard
-                .padding(.top, 70)
-                .padding(.horizontal, 20)
+//            topInstructionCard
+//                .padding(.top, 70)
+//                .padding(.horizontal, 20)
             
             Spacer()
             
@@ -125,7 +125,7 @@ struct DirectionalGuidanceOverlay: View {
             
             // Bottom checklist
             bottomChecklist
-                .padding(.bottom, 160)
+                .padding(.bottom, 100)
                 .padding(.horizontal, 20)
         }
     }
@@ -268,6 +268,7 @@ struct DirectionalGuidanceOverlay: View {
                         intensity: guidance.verticalIntensity
                     )
                     .padding(.bottom, 20)
+                    .offset(y:40)
                 }
             }
             
@@ -349,7 +350,7 @@ struct DirectionalGuidanceOverlay: View {
                 // Distance arrows
                 VStack(spacing: 8) {
                     if guidance.distance == .closer {
-                        ForEach(0..<2) { index in
+                        //ForEach(0..<2) { index in
                             Image(systemName: "arrow.uturn.up")
                                 .font(.system(size: 36))
                                 .foregroundStyle(
@@ -359,9 +360,9 @@ struct DirectionalGuidanceOverlay: View {
                                         endPoint: .bottom
                                     )
                                 )
-                                .opacity(index == 0 ? 1.0 : 0.5)
-                                .shadow(color: .orange.opacity(0.5), radius: 8)
-                        }
+//                                .opacity(index == 0 ? 1.0 : 0.5)
+//                                .shadow(color: .orange.opacity(0.5), radius: 8)
+                       // }
                     } else if guidance.distance == .farther {
                        // ForEach(0..<2) { index in
                             Image(systemName: "arrow.uturn.down")
@@ -411,7 +412,7 @@ struct DirectionalGuidanceOverlay: View {
     // MARK: - Bottom Checklist
     
     private var bottomChecklist: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 4) {
             checklistItem(
                 icon: "light.max",
                 label: "Lighting Quality",
@@ -444,7 +445,7 @@ struct DirectionalGuidanceOverlay: View {
                 progress: faceManager.isHeadPoseStable() ? 1.0 : 0.3
             )
         }
-        .padding(18)
+        .padding(12)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -471,13 +472,13 @@ struct DirectionalGuidanceOverlay: View {
         metric: String,
         progress: CGFloat
     ) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             // Icon with progress ring
             ZStack {
                 // Background circle
                 Circle()
                     .stroke(.white.opacity(0.2), lineWidth: 2.5)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 24, height: 24)
                 
                 // Progress circle
                 Circle()
@@ -486,19 +487,19 @@ struct DirectionalGuidanceOverlay: View {
                         isMet ? Color.green : Color.orange,
                         style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                     )
-                    .frame(width: 36, height: 36)
+                    .frame(width: 24, height: 24)
                     .rotationEffect(.degrees(-90))
                     .animation(.spring(response: 0.5), value: progress)
                 
                 // Icon
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(isMet ? .green : .white.opacity(0.6))
             }
             
             // Label
             Text(label)
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundColor(isMet ? .white : .white.opacity(0.7))
             
             Spacer()
@@ -518,10 +519,10 @@ struct DirectionalGuidanceOverlay: View {
             ZStack {
                 Circle()
                     .fill(isMet ? Color.green.opacity(0.2) : Color.white.opacity(0.1))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 20, height: 20)
                 
                 Image(systemName: isMet ? "checkmark" : "circle")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundColor(isMet ? .green : .white.opacity(0.4))
             }
         }
@@ -531,92 +532,96 @@ struct DirectionalGuidanceOverlay: View {
     // MARK: - Success Celebration
     
     private var successCelebration: some View {
-        VStack(spacing: 0) {
+        HStack{
             Spacer()
-                .frame(height: 100)
-            
-            VStack(spacing: 18) {
-                // Success icon with animation
-                ZStack {
-                    // Multiple glow circles
-                    ForEach(0..<3) { index in
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [.green.opacity(0.3), .clear],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: CGFloat(50 + index * 20)
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: 10)
+                
+                VStack(spacing: 18) {
+                    // Success icon with animation
+                    ZStack {
+                        // Multiple glow circles
+                        ForEach(0..<3) { index in
+                            Circle()
+                                .fill(
+                                    RadialGradient(
+                                        colors: [.green.opacity(0.3), .clear],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: CGFloat(50 + index * 20)
+                                    )
                                 )
-                            )
-                            .frame(width: CGFloat(100 + index * 40), height: CGFloat(100 + index * 40))
-                            .scaleEffect(pulseScale)
-                            .opacity(0.6)
+                                .frame(width: CGFloat(100 + index * 40), height: CGFloat(100 + index * 40))
+                                .scaleEffect(pulseScale)
+                                .opacity(0.6)
+                        }
+                        
+                        // Success checkmark
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [.green, .green.opacity(0.7)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 72, height: 72)
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(.white.opacity(0.3), lineWidth: 2)
+                                )
+                            
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .shadow(color: .green.opacity(0.5), radius: 20)
                     }
                     
-                    // Success checkmark
+                    // Success message
+                    VStack(spacing: 10) {
+                        Text("Perfect Position!")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        Text("Hold steady while capturing")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(
                     ZStack {
-                        Circle()
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                        
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .fill(
                                 LinearGradient(
-                                    colors: [.green, .green.opacity(0.7)],
+                                    colors: [.green.opacity(0.3), .green.opacity(0.1)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 72, height: 72)
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(.white.opacity(0.3), lineWidth: 2)
-                            )
                         
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 36, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    .shadow(color: .green.opacity(0.5), radius: 20)
-                }
-                
-                // Success message
-                VStack(spacing: 10) {
-                    Text("Perfect Position!")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Text("Hold steady while capturing")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.8))
-                }
-            }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                    
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [.green.opacity(0.3), .green.opacity(0.1)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [.green.opacity(0.6), .green.opacity(0.3)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
                             )
-                        )
-                    
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [.green.opacity(0.6), .green.opacity(0.3)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 2
-                        )
-                }
-            )
-            .shadow(color: .green.opacity(0.4), radius: 25, y: 10)
-            
+                    }
+                )
+                .shadow(color: .green.opacity(0.4), radius: 25, y: 10)
+                
+                Spacer()
+            }
             Spacer()
         }
     }
