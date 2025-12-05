@@ -6,11 +6,12 @@ import UIKit
 import CoreImage
 
 struct FaceDetectionView: View {
-    //For Saving Frames of count 30
+    // For saving frames of count 30 (for JPEG debug / liveness etc.)
     @State private var isSavingFrames: Bool = false
     @State private var savedFrameCount: Int = 0
-        private let maxSavedFrames = 30
+    private let maxSavedFrames = 30
     
+    let deviceKey = "12345678a"
     
     // ✅ CORRECT: Both created as StateObjects
     @StateObject private var faceManager: FaceManager
@@ -18,36 +19,35 @@ struct FaceDetectionView: View {
     
     // ✅ CORRECT: Created without FaceManager dependency
     @StateObject private var ncnnViewModel = NcnnLivenessViewModel()
-
+    
     let onComplete: () -> Void
-
+    
     // EAR series
     @State private var earSeries: [CGFloat] = []
     private let earMaxSamples = 180
     private let earRange: ClosedRange<CGFloat> = 0.0...0.5
     private let blinkThreshold: CGFloat = 0.21
-
+    
     // Pose buffers
     @State private var pitchSeries: [CGFloat] = []
     @State private var yawSeries:   [CGFloat] = []
     @State private var rollSeries:  [CGFloat] = []
     private let poseMaxSamples = 180
     private let poseRange: ClosedRange<CGFloat> = (-.pi)...(.pi)
-
+    
     // Animation state for frame recording indicator
     @State private var showRecordingFlash: Bool = false
     @State private var hideOverlays: Bool = false
     
+    private let hmacGenerator = HMACGenerator.self
+    
     init(onComplete: @escaping () -> Void) {
-        // Create shared instances
         let camSpecManager = CameraSpecManager()
         _cameraSpecManager = StateObject(wrappedValue: camSpecManager)
         _faceManager = StateObject(wrappedValue: FaceManager(cameraSpecManager: camSpecManager))
-        // ✅ No need to pass FaceManager here anymore!
-        
         self.onComplete = onComplete
     }
-
+    
     var body: some View {
         GeometryReader { geometry in
             let screenWidth = geometry.size.width
@@ -64,9 +64,10 @@ struct FaceDetectionView: View {
                 TargetFaceOvalOverlay(faceManager: faceManager)
                 FaceOvalOverlay(faceManager: faceManager)
                 
-                // In your ZStack, add the new overlay:
-                
                 DirectionalGuidanceOverlay(faceManager: faceManager)
+                
+                // Nose center overlay
+                NoseCenterCircleOverlay(isCentered: faceManager.isNoseTipCentered)
                 
                 // Gaze vector (shown after calibration)
                 if faceManager.isMovementTracking {
@@ -78,185 +79,61 @@ struct FaceDetectionView: View {
                     .animation(.easeInOut(duration: 0.3), value: faceManager.isMovementTracking)
                 }
                 
-                // Top indicators
                 VStack {
-                    HStack {
-                        // Liveness indicator
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(faceManager.isFaceReal ? Color.green : Color.red.opacity(0.7))
-                                .frame(width: 12, height: 12)
-                            
-                            Text(faceManager.isFaceReal ? "Real" : "Spoof")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Text("(\(String(format: "%.2f", faceManager.faceLivenessScore)))")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    
+                    // MARK: - Register button (LOCAL ONLY)
+                    Button {
+                        print("📸 Register tapped. totalFramesCollected = \(faceManager.totalFramesCollected)")
+                        
+                        faceManager.generateAndUploadFaceID { result in
+                            switch result {
+                            case .success:
+                                print("✅ Local enrollment stored successfully")
+                                faceManager.AllFramesOptionalAndMandatoryDistance = []
+                            case .failure(let error):
+                                print("❌ Local enrollment failed:", error)
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.black.opacity(0.6))
-                        )
-                        .padding(.leading, 16)
-                        .padding(.top, 60)
+                    } label: {
+                        Text("Register")
+                            .padding()
+                            .background(faceManager.totalFramesCollected >= 80 ? Color.green : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                    .disabled(faceManager.totalFramesCollected < 80)
+                    .padding(.bottom, 8)
+
+                    
+                    // MARK: - Login button (LOCAL ONLY)
+                    Button {
+                        print("🔐 Login tapped. totalFramesCollected = \(faceManager.totalFramesCollected)")
                         
-                        Spacer()
-                        
-                        // Frame collection progress (show when saving frames)
-                        if isSavingFrames || savedFrameCount > 0 {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    FrameCollectionProgressView(faceManager: faceManager)
-                                        .padding(.trailing, 20)
-                                        .padding(.top, 10)
+                        faceManager.verifyFaceIDAgainstLocal { result in
+                            switch result {
+                            case .success(let verification):
+                                let approxMatch = max(0.0, 100.0 - verification.errorPercentage)
+                                if verification.success {
+                                    print("✅ LOCAL Login successful. Approx match: \(String(format: "%.2f", approxMatch))%  (error: \(String(format: "%.2f", verification.errorPercentage))%)")
+                                } else {
+                                    print("❌ LOCAL Login failed. Approx match: \(String(format: "%.2f", approxMatch))%  (error: \(String(format: "%.2f", verification.errorPercentage))%), reason: \(verification.reason ?? "Unknown"))")
                                 }
-                                Spacer()
+                            case .failure(let error):
+                                print("❌ LOCAL verification error:", error)
                             }
                         }
-                        HStack(spacing: 8) {
-                            Circle()
-                                //.fill(isSavingFrames ? Color.green : Color.red.opacity(0.7))
-                                .fill(faceManager.totalFramesCollected == 0 ? Color.gray : Color.green)
-                                .frame(width: 12, height: 12)
-                            
-                            Text("Frames")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Text("\(faceManager.totalFramesCollected)")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.7))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.black.opacity(0.6))
-                        )
-                        .padding(.leading, 16)
-                        .padding(.top, 60)
+                    } label: {
+                        Text("Login")
+                            .padding()
+                            .background(faceManager.totalFramesCollected >= 80 ? Color.blue : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
                     }
-                    Spacer()
+                    .disabled(faceManager.totalFramesCollected < 80)
+                    .padding(.bottom, 24)
+
                 }
-        ScrollView(.horizontal,showsIndicators: false){
-                // 🔻 Bottom overlays: controls + graphs
-                VStack(spacing: 0) {
-                    Spacer()
-                    Spacer()
-                    
-                    // Control buttons row
-                    HStack(spacing: isCompact ? 12 : 20) {
-                        Spacer()
-                        
-                        if faceManager.isCentreTracking {
-                            Button {
-                                faceManager.isCentreTracking = false
-                                faceManager.isMovementTracking = true
-                                faceManager.calculateCenterMeans()
-                            } label: {
-                                Text("Stop")
-                                    .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                                    .padding(.horizontal, isCompact ? 16 : 24)
-                                    .padding(.vertical, isCompact ? 10 : 12)
-                                    .background(Color.red)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(isCompact ? 8 : 10)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        } else {
-                            Button {
-                                faceManager.isCentreTracking = true
-                                faceManager.isMovementTracking = false
-                                faceManager.actualLeftList.removeAll()
-                                faceManager.actualRightList.removeAll()
-                            } label: {
-                                Text("Start")
-                                    .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                                    .padding(.horizontal, isCompact ? 16 : 24)
-                                    .padding(.vertical, isCompact ? 10 : 12)
-                                    .background(Color.blue)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(isCompact ? 8 : 10)
-                            }
-                            .transition(.scale.combined(with: .opacity))
-                        }
-                        
-                        Button {
-                            faceManager.resetForNewUser()
-                        } label: {
-                            Text("Reset")
-                                .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                                .padding(.horizontal, isCompact ? 16 : 24)
-                                .padding(.vertical, isCompact ? 10 : 12)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(isCompact ? 8 : 10)
-                        }
-                        
-                        Button {
-                            onComplete()
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("Scan Complete")
-                            }
-                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                            .padding(.horizontal, isCompact ? 16 : 24)
-                            .padding(.vertical, isCompact ? 10 : 12)
-                            .foregroundColor(.white)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.green)
-                            )
-                        }
-                        Button{
-                            // After you have collected enough frames and AllFramesOptionalAndMandatoryDistance is filled:
-                            faceManager.generateAndSaveEnrollmentsJSON()
-                            
-                        }label: {
-                            HStack(spacing: 6) {
-                                Text("Generate Enrollment")
-                            }
-                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                            .padding(.horizontal, isCompact ? 16 : 24)
-                            .padding(.vertical, isCompact ? 10 : 12)
-                            .foregroundColor(.white)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.green)
-                            )
-                        }
-                        Button {
-                            savedFrameCount = 0
-                            isSavingFrames = true
-                            print("📸 Started capturing up to \(maxSavedFrames) frames...")
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("Save 30 Frames")
-                            }
-                            .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
-                            .padding(.horizontal, isCompact ? 16 : 24)
-                            .padding(.vertical, isCompact ? 10 : 12)
-                            .foregroundColor(.white)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.purple)
-                            )
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, isCompact ? 12 : 16)
-                    .animation(.easeInOut(duration: 0.2), value: faceManager.isCentreTracking)
-                    
-                    Spacer()
-                        .frame(maxHeight: isCompact ? 16 : 24)
-                }
-            }
             }
             // EAR feed (cheap, per-frame is OK)
             .onChange(of: faceManager.EAR) { newEAR in
@@ -266,6 +143,9 @@ struct FaceDetectionView: View {
                     s.removeFirst(s.count - earMaxSamples)
                 }
                 earSeries = s
+            }
+            .onReceive(faceManager.$NormalizedPoints) { _ in
+                faceManager.updateNoseTipCenterStatusFromCalcCoords()
             }
             // Pose feed from NormalizedPoints – throttled to ~10 Hz
             .onReceive(
@@ -334,25 +214,29 @@ struct FaceDetectionView: View {
         ) { buffer in
             // Existing NCNN processing
             ncnnViewModel.processFrame(buffer)
-
-            // New: Save up to 30 frames when capture is enabled
-            if isSavingFrames && savedFrameCount < maxSavedFrames  && faceManager.isHeadPoseStable() && faceManager.isFaceReal && faceManager.FaceOvalIsInTarget && faceManager.ratioIsInRange{
+            
+            // Optional: save JPEG frames while collecting
+            if isSavingFrames && savedFrameCount < maxSavedFrames &&
+                faceManager.isHeadPoseStable() &&
+                faceManager.isFaceReal &&
+                faceManager.FaceOvalIsInTarget &&
+                faceManager.ratioIsInRange
+            {
                 let currentIndex = savedFrameCount
                 savedFrameCount += 1
-
-                // Save off the main thread
+                
                 DispatchQueue.global(qos: .userInitiated).async {
                     saveFrame(buffer, index: currentIndex)
                 }
-
+                
                 if savedFrameCount == maxSavedFrames {
                     isSavingFrames = false
                     print("✅ Finished saving \(maxSavedFrames) frames.")
                 }
             }
         }
-
     }
+    
     private func instructionRow(icon: String, text: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
@@ -367,8 +251,8 @@ struct FaceDetectionView: View {
             Spacer()
         }
     }
+    
     // MARK: - Save camera frame to Documents as JPEG
-
     private func saveFrame(_ pixelBuffer: CVPixelBuffer, index: Int) {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         let context = CIContext()
@@ -434,3 +318,6 @@ struct FaceDetectionView: View {
 //        )
 //        .shadow(color: .black.opacity(0.3), radius: 6)
 //    }
+
+
+

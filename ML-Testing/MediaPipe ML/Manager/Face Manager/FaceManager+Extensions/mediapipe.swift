@@ -64,6 +64,11 @@ extension FaceManager: FaceLandmarkerLiveStreamDelegate {
         
         let frameWidth = Float(imageSize.width)
         let frameHeight = Float(imageSize.height)
+        // Store RAW MediaPipe normalized points (0–1)
+        let rawPoints: [(x: Float, y: Float)] = firstFace.map { lm in
+            (x: lm.x, y: lm.y)
+        }
+         rawMediaPipePoints = rawPoints
         
         // Transform landmarks to camera feed coordinates
         let coords: [(x: Float, y: Float)] = firstFace.map { lm in

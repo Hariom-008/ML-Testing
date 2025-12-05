@@ -11,13 +11,13 @@ extension FaceManager {
     /// Returns up to 20 frames, each trimmed to first 316 values
     func save316LengthDistanceArray() -> [[Float]] {
         // Require at least 20 frames collected
-        guard AllFramesOptionalAndMandatoryDistance.count >= 20 else {
-            print("⚠️ Not enough frames. Have \(AllFramesOptionalAndMandatoryDistance.count), need at least 20.")
+        guard AllFramesOptionalAndMandatoryDistance.count >= 80 else {
+            print("⚠️ Not enough frames. Have \(AllFramesOptionalAndMandatoryDistance.count), need at least 80.")
             return []
         }
         
         // Take first 20 frames
-        let first20Frames = Array(AllFramesOptionalAndMandatoryDistance.prefix(20))
+        let first20Frames = Array(AllFramesOptionalAndMandatoryDistance.prefix(80))
         
         // For each frame, keep only first 316 values
         let trimmed = first20Frames.map { frame -> [Float] in

@@ -64,6 +64,7 @@ final class FaceManager: NSObject, ObservableObject {
     
     
     // MARK: - Internal Calculation Buffers
+    var rawMediaPipePoints: [(x: Float, y: Float)] = []
     var CameraFeedCoordinates: [(x: Float, y: Float)] = []
     var CalculationCoordinates: [(x: Float, y: Float)] = []
     var ScreenCoordinates:[(x: CGFloat, y: CGFloat)] = []

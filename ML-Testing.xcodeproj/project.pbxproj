@@ -8,7 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		BF19B0B92EC25EA3005F2806 /* Pods_ML_Testing.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7CB0F169D87E09AAC55BF98F /* Pods_ML_Testing.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		BF1CF7172EDF165100A84E67 /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = BF1CF7162EDF165100A84E67 /* Alamofire */; };
 		BF5647622EC9EE30002EF012 /* Pods_ML_Testing.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CB0F169D87E09AAC55BF98F /* Pods_ML_Testing.framework */; };
+		BF5ED21B2EE1DFBF00A63102 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BF5ED21A2EE1DFBF00A63102 /* FirebaseFirestore */; };
+		BF5ED21D2EE1DFBF00A63102 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = BF5ED21C2EE1DFBF00A63102 /* FirebaseMessaging */; };
+		BF5ED21F2EE1DFBF00A63102 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = BF5ED21E2EE1DFBF00A63102 /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -59,6 +63,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BF5ED21D2EE1DFBF00A63102 /* FirebaseMessaging in Frameworks */,
+				BF1CF7172EDF165100A84E67 /* Alamofire in Frameworks */,
+				BF5ED21F2EE1DFBF00A63102 /* FirebaseStorage in Frameworks */,
+				BF5ED21B2EE1DFBF00A63102 /* FirebaseFirestore in Frameworks */,
 				BF5647622EC9EE30002EF012 /* Pods_ML_Testing.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -153,6 +161,8 @@
 			mainGroup = BF499B172EB89891007BA67B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				BF1CF7152EDF165100A84E67 /* XCRemoteSwiftPackageReference "Alamofire" */,
+				BF5ED2192EE1DFBF00A63102 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BF499B212EB89891007BA67B /* Products */;
@@ -362,7 +372,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationPortrait";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -409,7 +419,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationPortrait";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -450,6 +460,48 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BF1CF7152EDF165100A84E67 /* XCRemoteSwiftPackageReference "Alamofire" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Alamofire/Alamofire";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.10.2;
+			};
+		};
+		BF5ED2192EE1DFBF00A63102 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BF1CF7162EDF165100A84E67 /* Alamofire */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BF1CF7152EDF165100A84E67 /* XCRemoteSwiftPackageReference "Alamofire" */;
+			productName = Alamofire;
+		};
+		BF5ED21A2EE1DFBF00A63102 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BF5ED2192EE1DFBF00A63102 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		BF5ED21C2EE1DFBF00A63102 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BF5ED2192EE1DFBF00A63102 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		BF5ED21E2EE1DFBF00A63102 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BF5ED2192EE1DFBF00A63102 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BF499B182EB89891007BA67B /* Project object */;
 }
