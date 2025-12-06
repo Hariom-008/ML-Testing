@@ -26,21 +26,21 @@ extension FaceManager {
         
         return trimmed
     }
-    
-    /// Prints the trimmed arrays (80 arrays × 316 values)
-    func printTrimmedDistances() {
-        let trimmed = save316LengthDistanceArray()
-        
-        guard !trimmed.isEmpty else {
-            print("❌ No trimmed distances to print.")
-            return
+    func VerifyFrameDistanceArray() -> [[Float]] {
+        // Require at least 80 frames collected
+        guard AllFramesOptionalAndMandatoryDistance.count >= 10 else {
+            print("⚠️ Not enough frames. Have \(AllFramesOptionalAndMandatoryDistance.count), need at least 80.")
+            return []
         }
         
-        print("✅ Trimmed distances: \(trimmed.count) frames")
+        // Take first 10 frames
+        let first10Frames = Array(AllFramesOptionalAndMandatoryDistance.prefix(10))
         
-        for (frameIndex, frame) in trimmed.enumerated() {
-            print("—— Frame \(frameIndex + 1) — count: \(frame.count)")
-            print(frame)   // prints the [Float] array
+        // For each frame, keep only first 316 values
+        let trimmed = first10Frames.map { frame -> [Float] in
+            Array(frame.prefix(316))
         }
+        
+        return trimmed
     }
 }

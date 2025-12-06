@@ -4,10 +4,6 @@
 #import "OpenCVWrapper.h"
 #import "bch_codec.h"
 
-
-#ifndef SpoofDetect_Bridging_Header_h
-#define SpoofDetect_Bridging_Header_h
-
 #include <CoreGraphics/CoreGraphics.h>
 #include <stdbool.h>
 
@@ -81,5 +77,3 @@ float engine_live_detect_yuv(
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* SpoofDetect_Bridging_Header_h */

@@ -457,7 +457,7 @@ struct FaceDetectionView: View {
         print("   Invalid frames: \(invalidCount)")
         
         // Check if we have enough valid frames
-        guard validFrames.count >= 60 else {
+        guard validFrames.count >= 10 else {
             print("❌ INSUFFICIENT VALID FRAMES")
             isProcessing = false
             
@@ -479,31 +479,31 @@ struct FaceDetectionView: View {
                 switch result {
                 case .success(let verification):
                     let matchPercent = verification.matchPercentage
-                    let matchedFrames = verification.matchCount
+                    //let matchedFrames = verification.
                     
                     if verification.success {
                         print("✅ ========================================")
                         print("✅ LOGIN SUCCESSFUL! 🎉")
                         print("✅ Match: \(String(format: "%.1f", matchPercent))%")
-                        print("✅ Matched Frames: \(matchedFrames)")
+                     //   print("✅ Matched Frames: \(matchedFrames)")
                         print("✅ ========================================")
                         
                         // Show success alert
                         alertTitle = "✅ Login Successful!"
-                        alertMessage = "Welcome back!\n\nMatch: \(String(format: "%.1f", matchPercent))%\nMatched Frames: \(matchedFrames)"
+                      //  alertMessage = "Welcome back!\n\nMatch: \(String(format: "%.1f", matchPercent))%\nMatched Frames: \(matchedFrames)"
                         showAlert = true
                         
                     } else {
                         print("❌ ========================================")
                         print("❌ LOGIN FAILED ⛔")
                         print("❌ Match: \(String(format: "%.1f", matchPercent))%")
-                        print("❌ Matched Frames: \(matchedFrames)")
-                        print("❌ Reason: \(verification.reason ?? "Unknown")")
+                       // print("❌ Matched Frames: \(matchedFrames)")
+                       // print("❌ Reason: \(verification.reason ?? "Unknown")")
                         print("❌ ========================================")
                         
                         // Show failure alert
                         alertTitle = "❌ Login Failed"
-                        alertMessage = "Face verification failed.\n\nMatch: \(String(format: "%.1f", matchPercent))%\nMatched Frames: \(matchedFrames)\n\nReason: \(verification.reason ?? "Insufficient match")"
+                        //alertMessage = "Face verification failed.\n\nMatch: \(String(format: "%.1f", matchPercent))%\nMatched Frames: \(matchedFrames)\n\nReason: \(verification.reason ?? "Insufficient match")"
                         showAlert = true
                     }
                     

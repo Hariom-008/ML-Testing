@@ -1,428 +1,363 @@
 //
-//  BiometricBCH.swift
-//  ML-Testing
+//  BCHBiometricFE.swift
 //
-//  Created by Hari's Mac on 02.12.2025.
+//  Port of updated JS BCH fuzzy-extractor logic to Swift (SwiftUI-ready)
+//  Requires: CryptoKit, and your C BCH codec linked in target
 //
 
-import Foundation
 import Foundation
 import CryptoKit
 
-/// Port of the XOR-based helper-data approach from bch_integration.js
-enum BiometricError: Error, LocalizedError {
+@_silgen_name("init_bch")
+func c_init_bch(_ m: Int32, _ t: Int32, _ primPoly: UInt32) -> OpaquePointer?
+
+@_silgen_name("bch_get_ecc_bits_bridge")  // <-- updated name
+func c_get_ecc_bits(_ ctl: OpaquePointer?) -> Int32
+
+@_silgen_name("encodebits_bch")
+func c_encodebits_bch(_ ctl: OpaquePointer?, _ data: UnsafeMutablePointer<UInt8>!, _ ecc: UnsafeMutablePointer<UInt8>!)
+
+@_silgen_name("decodebits_bch")
+func c_decodebits_bch(_ ctl: OpaquePointer?, _ data: UnsafeMutablePointer<UInt8>!, _ recvECC: UnsafeMutablePointer<UInt8>!, _ errloc: UnsafeMutablePointer<UInt32>!) -> Int32
+
+@_silgen_name("correctbits_bch")
+func c_correctbits_bch(_ ctl: OpaquePointer?, _ databits: UnsafeMutablePointer<UInt8>!, _ errloc: UnsafeMutablePointer<UInt32>!, _ nerr: Int32)
+
+@_silgen_name("free_bch")  // optional but recommended
+func c_free_bch(_ ctl: OpaquePointer?)
+
+// MARK: - Errors
+enum BCHBiometricError: Error, LocalizedError {
+    case notInitialized
+    case invalidDistancesCount(expected: Int, actual: Int)
+    case memory
+    case codec(String)
+    case missingRegistrationData
+    case indexOutOfBounds
     case noDistanceArrays
-    case invalidDistanceCount(expected: Int, actual: Int)
-    case registrationIndexOutOfRange(index: Int, count: Int)
-    case missingHashBitsForErrorCalculation
-    case helperAndHashBitsLengthMismatch
-    case generic(_ message: String)
 
     var errorDescription: String? {
         switch self {
-        case .noDistanceArrays:
-            return "No distance arrays provided."
-        case .invalidDistanceCount(let expected, let actual):
-            return "Expected \(expected) distances, got \(actual)."
-        case .registrationIndexOutOfRange(let index, let count):
-            return "Index \(index) out of bounds (registrationData.count = \(count))."
-        case .missingHashBitsForErrorCalculation:
-            return "Missing hashBits data for error calculation."
-        case .helperAndHashBitsLengthMismatch:
-            return "Helper bits and hashBits length mismatch."
-        case .generic(let message):
-            return message
+        case .notInitialized: return "BCH module not initialized."
+        case .invalidDistancesCount(let e, let a): return "Expected \(e) distances, got \(a)."
+        case .memory: return "Failed to allocate native memory."
+        case .codec(let m): return "BCH codec error: \(m)"
+        case .missingRegistrationData: return "Missing helper or secret hash."
+        case .indexOutOfBounds: return "Registration index out of bounds."
+        case .noDistanceArrays : return "No distance arrays"
         }
     }
 }
 
-struct BiometricBCH {
-    // MARK: - Constants (mirroring JS)
-    static let numDistances = 316
-    static let bitsPerDistance = 8
-    static let totalDataBits = numDistances * bitsPerDistance
-    /// JS uses ~20% threshold, literally `MAX_ERROR_THRESHOLD = 18;`
-    static let maxErrorThresholdPercent: Double = 18.0
-    
+// MARK: - BCHBiometric (Fuzzy Extractor)
+final class BCHBiometric {
+
+    // === Parameters: keep in sync with your compiled bch_codec ===
+    // NOTE: BCH_T MUST match your compiled library (JS uses 455). If it differs,
+    // the library's internally computed ecc_bits will still be authoritative.
+    static let NUM_DISTANCES = 316
+    static let BITS_PER_DISTANCE = 8
+    static let TOTAL_DATA_BITS = NUM_DISTANCES * BITS_PER_DISTANCE
+
+    // Updated JS uses 18% max error budget for early checks (used informationally)
+    static let MAX_CORRECTABLE_ERRORS = Int((Double(TOTAL_DATA_BITS) * 0.18).rounded())
+
+    // BCH params from your JS
+    static let BCH_M: Int32 = 13
+    static let BCH_T: Int32 = 455 // IMPORTANT: must match your linked codec config
+
+    // MARK: - Types
     typealias BitArray = [UInt8]
-    
-    // MARK: - Data Models
-    
+
     struct RegistrationData: Codable {
-        /// String of '0'/'1': helperData = distanceBits XOR hashBits
+        /// "0/1" string of helper = codeword XOR biometricBits
         let helper: String
-        /// Hex string: SHA256(hashBitsString), same as CryptoJS.SHA256 in JS
-        let hashHex: String
-        /// String of '0'/'1': original random hashBits
-        let hashBits: String
-        /// ISO8601 timestamp (JS: `new Date().toISOString()`)
+        /// hex string: SHA256(secretKeyBitsString)
+        let secretHash: String
+        /// ISO timestamp for debugging/auditing
         let timestamp: Date
     }
-    
-    struct VerificationResult {
+
+    struct VerificationResult: Codable {
         let success: Bool
-        let matchPercentage: Double
-        let errorPercentage: Double
-        let numErrors: Int
-        let matchCount: Int
-        let totalBits: Int
-        let threshold: Double
+        let matchPercentage: Double       // 100 on exact hash match, else 0
         let registrationIndex: Int
         let hashMatch: Bool
-        let hashBitsSimilarity: Double
-        /// Optional reason when `success == false`
-        let reason: String?
-    }
-    
-    // MARK: - Helpers: normalization and bit conversions
-    
-    /// Average multiple distance arrays (like JS `averageDistances`)
-    static func averageDistances(_ distanceArrays: [[Double]]) throws -> [Double] {
-        guard !distanceArrays.isEmpty else {
-            throw BiometricError.noDistanceArrays
-        }
-        
-        // Always use the global constant
-        let expected = BiometricBCH.numDistances
-        
-        var summed = Array(repeating: 0.0, count: expected)
-        var countUsed = 0
-        
-        for (idx, arr) in distanceArrays.enumerated() {
-            guard arr.count == expected else {
-                print("⚠️ Distance array length mismatch at index \(idx): expected \(expected), got \(arr.count). Skipping.")
-                continue
-            }
-            for i in 0..<expected {
-                summed[i] += arr[i]
-            }
-            countUsed += 1
-        }
-        
-        guard countUsed > 0 else {
-            throw BiometricError.generic("No valid distance arrays after filtering mismatched lengths.")
-        }
-        
-        return summed.map { $0 / Double(countUsed) }
+        let storedHashPreview: String
+        let recoveredHashPreview: String
+        let numErrorsDetected: Int        // decoder-reported, if available
+        let totalBitsCompared: Int
+        let notes: String?
     }
 
-    
-    /// Min-max normalize to [0, 255] (JS `normalizeDistances`)
-    static func normalizeDistances(_ distances: [Double]) -> [Int] {
-        let numDistances = distances.map { $0 }
-        guard let minDist = numDistances.min(),
-              let maxDist = numDistances.max() else {
-            return Array(repeating: 128, count: distances.count)
+    // MARK: - State
+    private var ctl: OpaquePointer?
+    private var eccBits: Int = 0
+    private var n: Int = 0
+    private var K: Int = 0
+    private var initialized = false
+
+    // MARK: - Init/Teardown
+    func initBCH() throws {
+        if initialized { return }
+        guard let handle = c_init_bch(BCHBiometric.BCH_M, BCHBiometric.BCH_T, 0) else {
+            throw BCHBiometricError.codec("init_bch returned null")
         }
-        
-        let range = maxDist - minDist
-        print("Distance range: min=\(minDist), max=\(maxDist), range=\(range)")
-        
-        if range == 0 {
-            // all same, set to middle value
-            return Array(repeating: 128, count: distances.count)
-        }
-        
-        return numDistances.map { dist in
-            let normalized = (dist - minDist) / range
-            return Int(round(normalized * 255.0))
-        }
+        self.ctl = handle
+        let eb = Int(c_get_ecc_bits(handle))
+        self.eccBits = eb
+        self.n = (1 << Int(BCHBiometric.BCH_M)) - 1
+        self.K = n - eb
+        self.initialized = true
     }
-    
-    /// distances → bits (with normalization), JS `distancesToBits` (new version)
-    static func distancesToBits(_ distances: [Double]) throws -> BitArray {
-        guard distances.count == numDistances else {
-            throw BiometricError.invalidDistanceCount(
-                expected: numDistances,
-                actual: distances.count
+
+    // MARK: - Public API (mirrors JS)
+
+    /// Register — single array or array-of-arrays (averaged)
+    func registerBiometric(distances: [[Double]]?, single: [Double]? = nil) throws -> RegistrationData {
+        try ensureInit()
+
+        // resolve distances
+        let d: [Double]
+        if let arrays = distances, !arrays.isEmpty {
+            d = try averageDistances(arrays)
+        } else if let s = single {
+            d = s
+        } else {
+            throw BCHBiometricError.invalidDistancesCount(expected: Self.NUM_DISTANCES, actual: 0)
+        }
+
+        // 1) distances -> bits
+        let biometricBits = try distancesToBits(d)
+
+        // 2) random secretKeyBits of length K (same as JS, K is typically ~>2k for m=13)
+        let secretKeyBits = generateRandomBits(length: K)
+
+        // 3) BCH encode → ecc; build codeword = data(K) || ecc(eccBits) = n
+        let codeword = try encodeSecretKeyBCH(secretKeyBits)
+
+        // 4) align biometric bits to n and XOR
+        let alignedBiometric = alignBits(biometricBits, to: codeword.count, padWithZeros: true)
+        let helperBits = xorBits(codeword, alignedBiometric)
+
+        // 5) secretHash = SHA256(secretKeyBitsString)
+        let secretBitsStr = bitArrayToString(secretKeyBits)
+        let secretHashHex = sha256Hex(of: secretBitsStr)
+
+        return RegistrationData(
+            helper: bitArrayToString(helperBits),
+            secretHash: secretHashHex,
+            timestamp: Date()
+        )
+    }
+
+    /// Verify — accepts either a single reg object or [reg] with index
+    func verifyBiometric(distances: [Double],
+                         registration: RegistrationData,
+                         index: Int = 0) throws -> VerificationResult {
+        try ensureInit()
+
+        guard !registration.helper.isEmpty, !registration.secretHash.isEmpty else {
+            throw BCHBiometricError.missingRegistrationData
+        }
+
+        // helper string -> bits
+        let helperBits = bitStringToArray(registration.helper)
+
+        // 1) distances -> bits
+        let biometricBits = try distancesToBits(distances)
+
+        // 2) codeword' = helper XOR aligned(biometricBits)
+        let alignedBiometric = alignBits(biometricBits, to: helperBits.count, padWithZeros: true)
+        let codewordPrime = xorBits(helperBits, alignedBiometric)
+
+        // 3) BCH decode → secret'
+        let decode = try decodeCodewordBCH(codewordPrime)
+        let secretPrime = decode.correctedBits
+
+        // 4) hash(secret') and compare
+        let recoveredHash = sha256Hex(of: bitArrayToString(secretPrime))
+        let isMatch = timingSafeEqHex(recoveredHash, registration.secretHash)
+
+        return VerificationResult(
+            success: isMatch,
+            matchPercentage: isMatch ? 100 : 0,
+            registrationIndex: index,
+            hashMatch: isMatch,
+            storedHashPreview: String(registration.secretHash.prefix(16)) + "...",
+            recoveredHashPreview: String(recoveredHash.prefix(16)) + "...",
+            numErrorsDetected: decode.numErrors,
+            totalBitsCompared: secretPrime.count,
+            notes: "K=\(K), eccBits=\(eccBits), n=\(n)"
+        )
+    }
+
+    // MARK: - Core BCH encode/decode (1 byte per bit, like your JS/WASM port)
+
+    private func encodeSecretKeyBCH(_ secretKeyBits: BitArray) throws -> BitArray {
+        try ensureInit()
+
+        // Input to encoder must be exactly K bits, each as a byte {0,1}
+        let data = alignBits(secretKeyBits, to: K, padWithZeros: true)
+        var dataBuf = data // contiguous
+        var eccBuf = [UInt8](repeating: 0, count: eccBits)
+
+        // Pointers
+        let wrote = dataBuf.withUnsafeMutableBufferPointer { dataPtr -> Bool in
+            eccBuf.withUnsafeMutableBufferPointer { eccPtr -> Bool in
+                c_encodebits_bch(ctl, dataPtr.baseAddress!, eccPtr.baseAddress!)
+                return true
+            }
+        }
+        if !wrote { throw BCHBiometricError.memory }
+
+        // codeword = data(K) || ecc(eccBits) == n
+        return dataBuf + eccBuf
+    }
+
+    private func decodeCodewordBCH(_ codewordBits: BitArray) throws -> (correctedBits: BitArray, numErrors: Int) {
+        try ensureInit()
+        let cw = alignBits(codewordBits, to: n, padWithZeros: true)
+
+        let dataBits = Array(cw[0..<K])
+        let recvECC = Array(cw[K..<(K + eccBits)])
+
+        var dataBuf = dataBits
+        var eccBuf = recvECC
+        var errloc = [UInt32](repeating: 0, count: Int(Self.BCH_T))
+
+        let nerr: Int32 = dataBuf.withUnsafeMutableBufferPointer { dataPtr in
+            eccBuf.withUnsafeMutableBufferPointer { eccPtr in
+                errloc.withUnsafeMutableBufferPointer { errPtr in
+                    c_decodebits_bch(ctl, dataPtr.baseAddress!, eccPtr.baseAddress!, errPtr.baseAddress!)
+                }
+            }
+        }
+
+        var corrected = dataBuf
+        if nerr > 0 {
+            _ = corrected.withUnsafeMutableBufferPointer { dataPtr in
+                errloc.withUnsafeMutableBufferPointer { errPtr in
+                    c_correctbits_bch(ctl, dataPtr.baseAddress!, errPtr.baseAddress!, nerr)
+                }
+            }
+        }
+
+        // Read back corrected bits (each byte is 0/1)
+        corrected = corrected.map { $0 & 1 }
+        return (correctedBits: corrected, numErrors: max(0, Int(nerr)))
+    }
+
+    // MARK: - Utilities (1:1 with your JS)
+
+    private func distancesToBits(_ distances: [Double]) throws -> BitArray {
+        guard distances.count == Self.NUM_DISTANCES else {
+            throw BCHBiometricError.invalidDistancesCount(
+                expected: Self.NUM_DISTANCES, actual: distances.count
             )
         }
-        
-        print("Converting distances to bits: \(numDistances) distances, \(bitsPerDistance) bits each")
-        let normalized = normalizeDistances(distances)
+        let normalized: [Int] = normalizeDistances(distances)
         var bits: BitArray = []
-        bits.reserveCapacity(normalized.count * bitsPerDistance)
-        
-        for (i, dist) in normalized.enumerated() {
-            guard dist >= 0 && dist <= 255 else {
-                throw BiometricError.generic(
-                    "Distance \(i) must be in 0–255, got \(dist)"
-                )
-            }
-            // 8-bit MSB-first
-            for bit in stride(from: 7, through: 0, by: -1) {
-                let value = (dist >> bit) & 1
-                bits.append(UInt8(value))
+        bits.reserveCapacity(Self.TOTAL_DATA_BITS)
+        for v in normalized {
+            precondition(0...255 ~= v, "normalized distance out of range")
+            for b in stride(from: 7, through: 0, by: -1) {
+                bits.append(UInt8((v >> b) & 1))
             }
         }
-        
-        print("Converted \(distances.count) distances to \(bits.count) bits")
         return bits
     }
-    
-    /// bits → distances (from commented JS `bitsToDistances`)
-    static func bitsToDistances(_ bits: BitArray) throws -> [Int] {
-        guard bits.count == totalDataBits else {
-            throw BiometricError.generic(
-                "Expected \(totalDataBits) bits, got \(bits.count)"
-            )
+
+    private func normalizeDistances(_ distances: [Double]) -> [Int] {
+        guard let minVal = distances.min(), let maxVal = distances.max() else {
+            return Array(repeating: 128, count: distances.count)
         }
-        
-        var distances: [Int] = []
-        distances.reserveCapacity(numDistances)
-        
-        for i in 0..<numDistances {
-            var dist = 0
-            for bit in 0..<bitsPerDistance {
-                let bitIdx = i * bitsPerDistance + bit
-                dist = (dist << 1) | Int(bits[bitIdx] & 1)
-            }
-            distances.append(dist)
+        let range = maxVal - minVal
+        if range == 0 {
+            return Array(repeating: 128, count: distances.count)
         }
-        return distances
+        return distances.map { d in
+            let x = (d - minVal) / range
+            return Int((x * 255.0).rounded())
+        }
     }
-    
-    /// XOR two bit arrays (JS `xorBits`)
-    static func xorBits(_ a: BitArray, _ b: BitArray) throws -> BitArray {
-        guard a.count == b.count else {
-            throw BiometricError.generic("Bit arrays must have same length")
+
+    /// Average an array of distance arrays (ignores length-mismatched rows)
+    private func averageDistances(_ arrays: [[Double]]) throws -> [Double] {
+        guard let first = arrays.first else {
+            throw BCHBiometricError.invalidDistancesCount(expected: Self.NUM_DISTANCES, actual: 0)
         }
-        var result = BitArray()
-        result.reserveCapacity(a.count)
-        for i in 0..<a.count {
-            result.append((a[i] ^ b[i]) & 1)
+        let n = first.count
+        var sum = [Double](repeating: 0, count: n)
+        var used = 0
+        for arr in arrays where arr.count == n {
+            for i in 0..<n { sum[i] += arr[i] }
+            used += 1
         }
-        return result
+        guard used > 0 else {
+            throw BCHBiometricError.invalidDistancesCount(expected: n, actual: 0)
+        }
+        return sum.map { $0 / Double(used) }
     }
-    
-    /// Secure random bits (JS `generateRandomBits`)
-    static func generateRandomBits(length: Int) -> BitArray {
+
+    private func alignBits(_ bits: BitArray, to target: Int, padWithZeros: Bool) -> BitArray {
+        if bits.count == target { return bits }
+        if bits.count < target {
+            let pad = [UInt8](repeating: 0, count: target - bits.count)
+            return padWithZeros ? (bits + pad) : (pad + bits)
+        }
+        return Array(bits.prefix(target))
+    }
+
+    private func xorBits(_ a: BitArray, _ b: BitArray) -> BitArray {
+        precondition(a.count == b.count, "xor length mismatch")
+        var out = BitArray(repeating: 0, count: a.count)
+        for i in 0..<a.count { out[i] = a[i] ^ b[i] }
+        return out
+    }
+
+    private func generateRandomBits(length: Int) -> BitArray {
+        let byteCount = (length + 7) / 8
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        _ = SecRandomCopyBytes(kSecRandomDefault, byteCount, &bytes)
         var bits = BitArray()
         bits.reserveCapacity(length)
-        var rng = SystemRandomNumberGenerator()
-        for _ in 0..<length {
-            bits.append(UInt8.random(in: 0...1, using: &rng))
+        for i in 0..<length {
+            let byte = i / 8
+            let bit = 7 - (i % 8)
+            bits.append((bytes[byte] >> bit) & 1)
         }
         return bits
     }
-    
-    /// SHA256 hex of a string (mirrors CryptoJS.SHA256(string).toString(CryptoJS.enc.Hex))
-    static func sha256Hex(of string: String) -> String {
+
+    private func bitStringToArray(_ s: String) -> BitArray {
+        var out = BitArray()
+        out.reserveCapacity(s.count)
+        for ch in s.utf8 {
+            out.append(ch == 49 ? 1 : 0) // '1' == 49
+        }
+        return out
+    }
+
+    private func bitArrayToString(_ bits: BitArray) -> String {
+        String(bits.map { $0 == 0 ? "0" : "1" })
+    }
+
+    private func sha256Hex(of string: String) -> String {
         let data = Data(string.utf8)
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
-    
-    /// Convert "010101" -> [0,1,0,1,0,1]
-    static func bitStringToArray(_ s: String) -> BitArray {
-        return s.map { $0 == "1" ? UInt8(1) : UInt8(0) }
+
+    private func timingSafeEqHex(_ a: String, _ b: String) -> Bool {
+        let da = Array(a.utf8), db = Array(b.utf8)
+        if da.count != db.count { return false }
+        var diff: UInt8 = 0
+        for i in 0..<da.count { diff |= da[i] ^ db[i] }
+        return diff == 0
     }
-    
-    /// Convert [0,1,0,1] -> "0101"
-    static func bitArrayToString(_ bits: BitArray) -> String {
-        return bits.map { $0 == 0 ? "0" : "1" }.joined()
-    }
-    
-    // MARK: - Registration (JS: `registerBiometric`)
-    
-    /// Register using a single distance array
-    static func registerBiometric(distances: [Double]) throws -> RegistrationData {
-        print("Processing distances for registration:", distances.count)
-        
-        // 1. distances → bits
-        let distanceBits = try distancesToBits(distances)
-        
-        // 2. Generate random hashBits, then hashHex
-        let hashBits = generateRandomBits(length: distanceBits.count)
-        
-        // JS: hashHex := SHA256(hashBitsString)
-        let hashBitsString = bitArrayToString(hashBits)
-        let hashHex = sha256Hex(of: hashBitsString)
-        print("Generated hashHex:", String(hashHex.prefix(16)) + "...")
-        
-        // 3. helperData = distanceBits XOR hashBits
-        let helperBits = try xorBits(distanceBits, hashBits)
-        print("Created helperData: \(helperBits.count) bits")
-        
-        let helperString = bitArrayToString(helperBits)
-        
-        print("Registration data created:", [
-            "helper": helperString.count,
-            "hashHex": hashHex.count,
-            "hashBits": hashBitsString.count
-        ])
-        
-        return RegistrationData(
-            helper: helperString,
-            hashHex: hashHex,
-            hashBits: hashBitsString,
-            timestamp: Date()
-        )
-    }
-    
-    /// Register using multiple distance arrays (JS: `averageDistances` branch)
-    static func registerBiometric(multipleDistances: [[Double]]) throws -> RegistrationData {
-        let averaged = try averageDistances(multipleDistances)
-        return try registerBiometric(distances: averaged)
-    }
-    
-    // MARK: - Verification (JS: `verifyBiometric`)
-    
-    static func verifyBiometric(
-        distances: [Double],
-        registrationData: [RegistrationData],
-        index: Int = 0
-    ) throws -> VerificationResult {
-        guard !registrationData.isEmpty else {
-            throw BiometricError.generic("registrationData is empty.")
-        }
-        guard index < registrationData.count else {
-            throw BiometricError.registrationIndexOutOfRange(
-                index: index,
-                count: registrationData.count
-            )
-        }
-        
-        let reg = registrationData[index]
-        
-        // Convert stored strings back to bits
-        let helperBits = bitStringToArray(reg.helper)
-        let storedHashHex = reg.hashHex
-        let storedHashBits = bitStringToArray(reg.hashBits)
-        
-        print("=== VERIFICATION DEBUG ===")
-        print("Helper bits length:", helperBits.count)
-        print("Stored hashHex:", storedHashHex.isEmpty ? "not found" : String(storedHashHex.prefix(16)) + "...")
-        print("Stored hashBits length:", storedHashBits.count)
-        
-        // Step 1: new distances → bits
-        let newDistanceBits = try distancesToBits(distances)
-        print("Converted \(distances.count) distances to \(newDistanceBits.count) bits")
-        
-        // Step 2: reconstruct original distance bits & compute error
-        guard !storedHashBits.isEmpty,
-              storedHashBits.count == helperBits.count else {
-            throw BiometricError.missingHashBitsForErrorCalculation
-        }
-        
-        print("\n=== Reconstructing original distance bits ===")
-        print("Helper bits first 20:", helperBits.prefix(20).map(String.init).joined(separator: ","))
-        print("Stored hashBits first 20:", storedHashBits.prefix(20).map(String.init).joined(separator: ","))
-        
-        // helper XOR hashBits = distanceBits
-        let originalDistanceBits = try xorBits(helperBits, storedHashBits)
-        print("Reconstructed original distance bits: \(originalDistanceBits.count) bits")
-        
-        // Error percentage between newDistanceBits and originalDistanceBits
-        let minLength = min(newDistanceBits.count, originalDistanceBits.count)
-        var errorCount = 0
-        for i in 0..<minLength {
-            if newDistanceBits[i] != originalDistanceBits[i] {
-                errorCount += 1
-            }
-        }
-        
-        let errorPercentage: Double = minLength > 0
-            ? (Double(errorCount) / Double(minLength)) * 100.0
-            : 100.0
-        print("Error percentage: \(String(format: "%.2f", errorPercentage))% (\(errorCount)/\(minLength) bits differ)")
-        
-        // Step 3: early reject if error too high
-        if errorPercentage > maxErrorThresholdPercent {
-            return VerificationResult(
-                success: false,
-                matchPercentage: 0,
-                errorPercentage: errorPercentage,
-                numErrors: errorCount,
-                matchCount: 0,
-                totalBits: newDistanceBits.count,
-                threshold: maxErrorThresholdPercent,
-                registrationIndex: index,
-                hashMatch: false,
-                hashBitsSimilarity: 0,
-                reason: "Error too high: \(String(format: "%.2f", errorPercentage))% (max: \(maxErrorThresholdPercent)%)"
-            )
-        }
-        
-        // Step 4: reconstruct hashBits from helper & originalDistanceBits
-        print("\n=== Reconstructing hashBits from helper & original distance bits ===")
-        let reconstructedHashBits = try xorBits(helperBits, originalDistanceBits)
-        
-        // Compare reconstructed hashBits vs storedHashBits
-        var hashBitsMatch = true
-        var hashBitsMatchCount = 0
-        let maxCheck = min(storedHashBits.count, reconstructedHashBits.count)
-        for i in 0..<maxCheck {
-            if storedHashBits[i] == reconstructedHashBits[i] {
-                hashBitsMatchCount += 1
-            } else {
-                hashBitsMatch = false
-            }
-        }
-        if !hashBitsMatch {
-            print("⚠️ HashBits reconstruction mismatch, matches at \(hashBitsMatchCount)/\(maxCheck) positions")
-        } else {
-            print("✓ HashBits reconstruction successful - all bits match")
-        }
-        
-        // Use storedHashBits if they match, otherwise reconstructed (same as JS)
-        let newHashBits: BitArray = hashBitsMatch ? storedHashBits : reconstructedHashBits
-        
-        // Step 5: SHA256(newHashBitsString) to hex
-        let newHashBitsString = bitArrayToString(newHashBits)
-        let newHashHex = sha256Hex(of: newHashBitsString)
-        print("Generated newHashHex from hashBits:", String(newHashHex.prefix(32)) + "...")
-        
-        // Step 6: Compare hashes
-        let isHashHexMatch = (newHashHex == storedHashHex)
-        
-        // HashBits similarity (stored vs newHashBits)
-        var hashBitsSimilarityCount = 0
-        let hashBitsLength = min(storedHashBits.count, newHashBits.count)
-        for i in 0..<hashBitsLength {
-            if storedHashBits[i] == newHashBits[i] {
-                hashBitsSimilarityCount += 1
-            }
-        }
-        let hashBitsSimilarity = hashBitsLength > 0
-            ? (Double(hashBitsSimilarityCount) / Double(hashBitsLength)) * 100.0
-            : 0.0
-        
-        // Overall match percentage (same heuristic as JS)
-        var matchPercentage: Double
-        if isHashHexMatch {
-            matchPercentage = 100.0
-        } else {
-            let errorWeight = max(0.0, 100.0 - errorPercentage)
-            matchPercentage = hashBitsSimilarity * 0.7 + errorWeight * 0.3
-            if matchPercentage > 99.0 {
-                matchPercentage = 99.0
-            }
-        }
-        
-        let isMatch = isHashHexMatch  // strict: only exact hashHex match is "success"
-        
-        print("=== Hash Comparison ===")
-        print("Stored hashHex:", storedHashHex.isEmpty ? "not found" : String(storedHashHex.prefix(32)) + "...")
-        print("New hashHex:", String(newHashHex.prefix(32)) + "...")
-        print("HashHex match:", isHashHexMatch)
-        print("HashBits similarity:", String(format: "%.2f", hashBitsSimilarity) + "%")
-        print("HashBits match count:", hashBitsSimilarityCount, "/", hashBitsLength)
-        print("Calculated match percentage:", String(format: "%.2f", matchPercentage) + "%")
-        print("Final success:", isMatch)
-        
-        return VerificationResult(
-            success: isMatch,
-            matchPercentage: (matchPercentage * 100).rounded() / 100.0, // 2 decimals
-            errorPercentage: errorPercentage,
-            numErrors: errorCount,
-            matchCount: hashBitsSimilarityCount,
-            totalBits: newDistanceBits.count,
-            threshold: maxErrorThresholdPercent,
-            registrationIndex: index,
-            hashMatch: isHashHexMatch,
-            hashBitsSimilarity: hashBitsSimilarity,
-            reason: isMatch ? nil : "HashHex mismatch"
-        )
+
+    private func ensureInit() throws {
+        if !initialized { try initBCH() }
     }
 }
