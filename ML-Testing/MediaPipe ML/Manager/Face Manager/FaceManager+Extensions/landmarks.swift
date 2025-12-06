@@ -184,7 +184,7 @@ extension FaceManager {
         """)
         
         // LIVENESS GATE: Only store if ALL conditions pass
-        if isFaceReal && ratioIsInRange && isHeadPoseStable() {
+        if isFaceReal && ratioIsInRange && isHeadPoseStable() && allDistances.count != 0{
             AllFramesOptionalAndMandatoryDistance.append(allDistances)
             totalFramesCollected = AllFramesOptionalAndMandatoryDistance.count
             frameRecordedTrigger.toggle()

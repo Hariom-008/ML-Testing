@@ -39,6 +39,13 @@ struct FaceDetectionView: View {
     @State private var showRecordingFlash: Bool = false
     @State private var hideOverlays: Bool = false
     
+    // UI State for enrollment/verification
+    @State private var isEnrolled: Bool = false
+    @State private var showAlert: Bool = false
+    @State private var alertTitle: String = ""
+    @State private var alertMessage: String = ""
+    @State private var isProcessing: Bool = false
+    
     private let hmacGenerator = HMACGenerator.self
     
     init(onComplete: @escaping () -> Void) {
@@ -79,60 +86,145 @@ struct FaceDetectionView: View {
                     .animation(.easeInOut(duration: 0.3), value: faceManager.isMovementTracking)
                 }
                 
+                // Processing overlay
+                if isProcessing {
+                    ZStack {
+                        Color.black.opacity(0.5)
+                            .ignoresSafeArea()
+                        
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            
+                            Text("Processing...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+                        .padding(32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.black.opacity(0.8))
+                        )
+                    }
+                }
+                
                 VStack {
+                    // Top status bar
+                    HStack(spacing: 16) {
+                        // Enrollment status
+                        HStack(spacing: 8) {
+                            Image(systemName: isEnrolled ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundColor(isEnrolled ? .green : .red)
+                            Text(isEnrolled ? "Enrolled" : "Not Enrolled")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.black.opacity(0.7))
+                        )
+                        .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        // Frame counter
+                        HStack(spacing: 8) {
+                            Image(systemName: "camera.fill")
+                            Text("\(faceManager.totalFramesCollected)")
+                                .font(.system(size: 14, weight: .bold))
+                                .monospacedDigit()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(faceManager.totalFramesCollected >= 80 ? Color.green.opacity(0.8) : Color.black.opacity(0.7))
+                        )
+                        .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 60)
+                    
                     Spacer()
                     
-                    // MARK: - Register button (LOCAL ONLY)
-                    Button {
-                        print("📸 Register tapped. totalFramesCollected = \(faceManager.totalFramesCollected)")
-                        
-                        faceManager.generateAndUploadFaceID { result in
-                            switch result {
-                            case .success:
-                                print("✅ Local enrollment stored successfully")
-                                faceManager.AllFramesOptionalAndMandatoryDistance = []
-                            case .failure(let error):
-                                print("❌ Local enrollment failed:", error)
+                    // Bottom buttons
+                    VStack(spacing: 12) {
+                        // MARK: - Register button
+                        Button {
+                            handleRegister()
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.badge.plus.fill")
+                                Text("Register")
+                                    .font(.system(size: 16, weight: .semibold))
                             }
-                        }
-                    } label: {
-                        Text("Register")
-                            .padding()
-                            .background(faceManager.totalFramesCollected >= 80 ? Color.green : Color.gray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(registerButtonColor())
+                            )
                             .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .disabled(faceManager.totalFramesCollected < 80)
-                    .padding(.bottom, 8)
-
-                    
-                    // MARK: - Login button (LOCAL ONLY)
-                    Button {
-                        print("🔐 Login tapped. totalFramesCollected = \(faceManager.totalFramesCollected)")
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                        }
+                        .disabled(!canRegister())
+                        .opacity(canRegister() ? 1.0 : 0.5)
                         
-                        faceManager.verifyFaceIDAgainstLocal { result in
-                            switch result {
-                            case .success(let verification):
-                                let approxMatch = max(0.0, 100.0 - verification.errorPercentage)
-                                if verification.success {
-                                    print("✅ LOCAL Login successful. Approx match: \(String(format: "%.2f", approxMatch))%  (error: \(String(format: "%.2f", verification.errorPercentage))%)")
-                                } else {
-                                    print("❌ LOCAL Login failed. Approx match: \(String(format: "%.2f", approxMatch))%  (error: \(String(format: "%.2f", verification.errorPercentage))%), reason: \(verification.reason ?? "Unknown"))")
-                                }
-                            case .failure(let error):
-                                print("❌ LOCAL verification error:", error)
+                        // MARK: - Login button
+                        Button {
+                            handleLogin()
+                        } label: {
+                            HStack {
+                                Image(systemName: "lock.shield.fill")
+                                Text("Login")
+                                    .font(.system(size: 16, weight: .semibold))
                             }
-                        }
-                    } label: {
-                        Text("Login")
-                            .padding()
-                            .background(faceManager.totalFramesCollected >= 80 ? Color.blue : Color.gray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(loginButtonColor())
+                            )
                             .foregroundColor(.white)
-                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                        }
+                        .disabled(!canLogin())
+                        .opacity(canLogin() ? 1.0 : 0.5)
+                        
+                        // MARK: - Clear enrollment button (for testing)
+                        Button {
+                            handleClearEnrollment()
+                        } label: {
+                            HStack {
+                                Image(systemName: "trash.fill")
+                                Text("Clear Enrollment")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.red.opacity(0.7))
+                            )
+                            .foregroundColor(.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                        }
+                        .disabled(!isEnrolled)
+                        .opacity(isEnrolled ? 1.0 : 0.5)
                     }
-                    .disabled(faceManager.totalFramesCollected < 80)
-                    .padding(.bottom, 24)
-
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 40)
                 }
             }
             // EAR feed (cheap, per-frame is OK)
@@ -183,16 +275,12 @@ struct FaceDetectionView: View {
                     }
                 }
             }
-            .alert("Upload Status", isPresented: .constant(faceManager.uploadError != nil || faceManager.uploadSuccess)) {
+            .alert(alertTitle, isPresented: $showAlert) {
                 Button("OK") {
-                    faceManager.uploadError = nil
+                    showAlert = false
                 }
             } message: {
-                if let error = faceManager.uploadError {
-                    Text("Error: \(error)")
-                } else if faceManager.uploadSuccess {
-                    Text("Face pattern uploaded successfully! ✅")
-                }
+                Text(alertMessage)
             }
         }
         .onAppear {
@@ -203,6 +291,9 @@ struct FaceDetectionView: View {
             ncnnViewModel.onLivenessUpdated = { [weak faceManager] score in
                 faceManager?.updateFaceLivenessScore(score)
             }
+            
+            // Check enrollment status
+            checkEnrollmentStatus()
             
             debugLog("✅ FaceDetectionView appeared, callback connected")
         }
@@ -235,6 +326,217 @@ struct FaceDetectionView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func checkEnrollmentStatus() {
+        isEnrolled = LocalEnrollmentCache.shared.loadAll() != nil
+        print("📊 Enrollment status: \(isEnrolled ? "✅ Enrolled" : "❌ Not Enrolled")")
+    }
+    
+    private func canRegister() -> Bool {
+        return faceManager.totalFramesCollected >= 80 && !isProcessing
+    }
+    
+    private func canLogin() -> Bool {
+        return faceManager.totalFramesCollected >= 80 && isEnrolled && !isProcessing
+    }
+    
+    private func registerButtonColor() -> Color {
+        if isProcessing { return .gray }
+        if isEnrolled { return .orange }  // Already enrolled, can re-register
+        return faceManager.totalFramesCollected >= 80 ? .green : .gray
+    }
+    
+    private func loginButtonColor() -> Color {
+        if isProcessing { return .gray }
+        return (faceManager.totalFramesCollected >= 80 && isEnrolled) ? .blue : .gray
+    }
+    
+    // MARK: - Register Handler
+    private func handleRegister() {
+        print("\n" + String(repeating: "=", count: 50))
+        print("📸 REGISTER BUTTON PRESSED")
+        print("Total frames collected: \(faceManager.totalFramesCollected)")
+        print(String(repeating: "=", count: 50))
+        
+        isProcessing = true
+        
+        // Validate frames
+        let allFrames = faceManager.save316LengthDistanceArray()
+        let validFrames = allFrames.filter { $0.count == 316 }
+        let invalidCount = allFrames.count - validFrames.count
+        
+        print("📊 Frame Analysis:")
+        print("   Total frames: \(allFrames.count)")
+        print("   Valid frames (316 distances): \(validFrames.count)")
+        print("   Invalid frames: \(invalidCount)")
+        
+        // Check if we have enough valid frames
+        guard validFrames.count >= 80 else {
+            print("❌ INSUFFICIENT VALID FRAMES")
+            isProcessing = false
+            
+            alertTitle = "❌ Registration Failed"
+            alertMessage = "Need at least 80 valid frames.\n\nFound: \(validFrames.count) valid\nInvalid: \(invalidCount)"
+            showAlert = true
+            return
+        }
+        
+        // Proceed with enrollment
+        faceManager.generateAndUploadFaceID { result in
+            DispatchQueue.main.async {
+                isProcessing = false
+                
+                switch result {
+                case .success:
+                    print("✅ ========================================")
+                    print("✅ REGISTRATION SUCCESSFUL!")
+                    print("✅ 80 enrollment records saved")
+                    print("✅ ========================================")
+                    
+                    // Update enrollment status
+                    checkEnrollmentStatus()
+                    
+                    // Clear frames
+                    faceManager.AllFramesOptionalAndMandatoryDistance = []
+                    faceManager.totalFramesCollected = 0
+                    
+                    // Show success alert
+                    alertTitle = "✅ Registration Successful"
+                    alertMessage = "Your face has been enrolled!\n\nYou can now use Login to verify your identity."
+                    showAlert = true
+                    
+                case .failure(let error):
+                    print("❌ ========================================")
+                    print("❌ REGISTRATION FAILED")
+                    print("❌ Error: \(error.localizedDescription)")
+                    print("❌ ========================================")
+                    
+                    // Show error alert
+                    alertTitle = "❌ Registration Failed"
+                    alertMessage = "Error: \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Login Handler
+    private func handleLogin() {
+        print("\n" + String(repeating: "=", count: 50))
+        print("🔐 LOGIN BUTTON PRESSED")
+        print("Total frames collected: \(faceManager.totalFramesCollected)")
+        print(String(repeating: "=", count: 50))
+        
+        isProcessing = true
+        
+        // Double-check enrollment exists
+        guard let enrollment = LocalEnrollmentCache.shared.loadAll() else {
+            print("❌ NO ENROLLMENT FOUND!")
+            isProcessing = false
+            checkEnrollmentStatus()
+            
+            alertTitle = "❌ No Enrollment Found"
+            alertMessage = "Please press REGISTER first to enroll your face."
+            showAlert = true
+            return
+        }
+        
+        print("✅ Found enrollment with \(enrollment.count) records")
+        
+        // Validate frames
+        let allFrames = faceManager.save316LengthDistanceArray()
+        let validFrames = allFrames.filter { $0.count == 316 }
+        let invalidCount = allFrames.count - validFrames.count
+        
+        print("📊 Frame Analysis:")
+        print("   Total frames: \(allFrames.count)")
+        print("   Valid frames (316 distances): \(validFrames.count)")
+        print("   Invalid frames: \(invalidCount)")
+        
+        // Check if we have enough valid frames
+        guard validFrames.count >= 60 else {
+            print("❌ INSUFFICIENT VALID FRAMES")
+            isProcessing = false
+            
+            alertTitle = "❌ Login Failed"
+            alertMessage = "Need at least 60 valid frames.\n\nFound: \(validFrames.count) valid\nInvalid: \(invalidCount)"
+            showAlert = true
+            return
+        }
+        
+        // Proceed with verification
+        faceManager.verifyFaceIDAgainstLocal { result in
+            DispatchQueue.main.async {
+                isProcessing = false
+                
+                // Clear frames after verification
+                faceManager.AllFramesOptionalAndMandatoryDistance = []
+                faceManager.totalFramesCollected = 0
+                
+                switch result {
+                case .success(let verification):
+                    let matchPercent = verification.matchPercentage
+                    let matchedFrames = verification.matchCount
+                    
+                    if verification.success {
+                        print("✅ ========================================")
+                        print("✅ LOGIN SUCCESSFUL! 🎉")
+                        print("✅ Match: \(String(format: "%.1f", matchPercent))%")
+                        print("✅ Matched Frames: \(matchedFrames)")
+                        print("✅ ========================================")
+                        
+                        // Show success alert
+                        alertTitle = "✅ Login Successful!"
+                        alertMessage = "Welcome back!\n\nMatch: \(String(format: "%.1f", matchPercent))%\nMatched Frames: \(matchedFrames)"
+                        showAlert = true
+                        
+                    } else {
+                        print("❌ ========================================")
+                        print("❌ LOGIN FAILED ⛔")
+                        print("❌ Match: \(String(format: "%.1f", matchPercent))%")
+                        print("❌ Matched Frames: \(matchedFrames)")
+                        print("❌ Reason: \(verification.reason ?? "Unknown")")
+                        print("❌ ========================================")
+                        
+                        // Show failure alert
+                        alertTitle = "❌ Login Failed"
+                        alertMessage = "Face verification failed.\n\nMatch: \(String(format: "%.1f", matchPercent))%\nMatched Frames: \(matchedFrames)\n\nReason: \(verification.reason ?? "Insufficient match")"
+                        showAlert = true
+                    }
+                    
+                case .failure(let error):
+                    print("❌ ========================================")
+                    print("❌ VERIFICATION ERROR")
+                    print("❌ Error: \(error.localizedDescription)")
+                    print("❌ ========================================")
+                    
+                    // Show error alert
+                    alertTitle = "❌ Verification Error"
+                    alertMessage = "Error: \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Clear Enrollment Handler
+    private func handleClearEnrollment() {
+        print("\n🧹 CLEARING ENROLLMENT DATA")
+        
+        LocalEnrollmentCache.shared.clear()
+        faceManager.AllFramesOptionalAndMandatoryDistance = []
+        faceManager.totalFramesCollected = 0
+        
+        checkEnrollmentStatus()
+        
+        print("✅ All enrollment data cleared")
+        
+        alertTitle = "🧹 Data Cleared"
+        alertMessage = "Enrollment data has been cleared.\n\nYou can now register again."
+        showAlert = true
     }
     
     private func instructionRow(icon: String, text: String) -> some View {
@@ -279,45 +581,3 @@ struct FaceDetectionView: View {
         }
     }
 }
-
-
-
-//    @ViewBuilder
-//    private func overlayCards(screenWidth: CGFloat, screenHeight: CGFloat, isCompact: Bool) -> some View {
-//        let cardWidth = isCompact ? min(screenWidth * 0.6, 240) : min(screenWidth * 0.18, 260)
-//        let cardHeight = isCompact ? min(screenHeight * 0.25, 160) : min(screenHeight * 0.22, 180)
-//
-//        PoseGraphCard(
-//            pitch: pitchSeries,
-//            yaw:   yawSeries,
-//            roll:  rollSeries,
-//            minY: poseRange.lowerBound,
-//            maxY: poseRange.upperBound
-//        )
-//        .frame(width: cardWidth, height: cardHeight)
-//
-//        EARGraphCard(
-//            values: earSeries,
-//            minY: earRange.lowerBound,
-//            maxY: earRange.upperBound,
-//            threshold: blinkThreshold
-//        )
-//        .frame(width: cardWidth, height: cardHeight)
-//        .shadow(color: .black.opacity(0.3), radius: 6)
-//
-//        NormalizedPointsOverlay(
-//            points: faceManager.NormalizedPoints,
-//            pointSize: isCompact ? 2.5 : 3.0,
-//            insetRatio: 0.12,
-//            smoothingAlpha: 0.25
-//        )
-//        .frame(width: cardWidth, height: cardHeight)
-//        .overlay(
-//            RoundedRectangle(cornerRadius: 12)
-//                .stroke(.white.opacity(0.2), lineWidth: 1)
-//        )
-//        .shadow(color: .black.opacity(0.3), radius: 6)
-//    }
-
-
-
