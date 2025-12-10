@@ -224,21 +224,21 @@ extension FaceManager {
 // MARK: - Verification Extension
 extension FaceManager {
 
-    /// Verify current captured frames against stored 80 enrollment frames.
-    ///
-    /// For a frame to count as MATCHED:
-    ///   1. BCH hashMatch == true
-    ///   2. BCH error% <= allowedErrorThreshold
-    ///   3. tokenPrime == stored token (using SALT + K2 + R)
-    /// Success criteria (session-level): At least 25% of valid frames must match.
+    /// Token-only verification:
+    /// - Capture ~10 frames
+    /// - For each captured frame, try to find ANY stored frame (out of 80) whose token matches
+    /// - A frame is considered MATCHED if:
+    ///       BCH hashMatch == true   (we only use this as a gate, no ECC error thresholds)
+    ///       AND token' == stored token (using SALT + K2 + R from the stored record)
+    /// - Session passes if at least 5 frames (out of the 10) have ≥1 token match.
     func verifyFaceIDAgainstLocal(
         completion: @escaping (Result<BCHBiometric.VerificationResult, Error>) -> Void
     ) {
-        print("\n🔍 ========== VERIFICATION STARTED ==========")
+        print("\n🔍 ========== VERIFICATION (TOKEN-ONLY) STARTED ==========")
 
         // Capture current frames on calling thread (cheap)
         let trimmedFrames = VerifyFrameDistanceArray()
-        print("📊 Captured \(trimmedFrames.count) frames total")
+        print("📊 Captured \(trimmedFrames.count) frames total (raw)")
 
         // Filter valid frames
         var validFrames: [[Float]] = []
@@ -253,24 +253,33 @@ extension FaceManager {
             }
         }
 
-        print("✅ Valid frames: \(validFrames.count)")
-        print("❌ Invalid frames: \(invalidFrameIndices.count)")
+        print("✅ Valid frames (distance count OK): \(validFrames.count)")
+        print("❌ Invalid frames (distance count mismatch): \(invalidFrameIndices.count)")
 
-        // Require at least 5 valid frames
-        let minValidFrames = 5
-        guard validFrames.count >= minValidFrames else {
-            print("❌ Insufficient valid frames: got \(validFrames.count), need at least \(minValidFrames)")
+        // We want to work with 10 collected frames
+        let requiredCollectedFrames = 10
+
+        guard validFrames.count >= requiredCollectedFrames else {
+            print("❌ Insufficient valid frames for token-only verification.")
+            print("   Got \(validFrames.count), but need at least \(requiredCollectedFrames) valid frames.")
 
             DispatchQueue.main.async {
-                completion(.failure(BCHBiometricError.invalidDistancesCount(
-                    expected: minValidFrames,
-                    actual: validFrames.count
-                )))
+                completion(.failure(
+                    BCHBiometricError.invalidDistancesCount(
+                        expected: requiredCollectedFrames,
+                        actual: validFrames.count
+                    )
+                ))
             }
+            print("🔚 ========== VERIFICATION ABORTED (NOT ENOUGH VALID FRAMES) ==========\n")
             return
         }
 
-        // Load all 80 stored enrollment records (now include salt / k2 / token)
+        // Take only the first 10 valid frames for the token check
+        let framesToUse = Array(validFrames.prefix(requiredCollectedFrames))
+        print("🎯 Using first \(framesToUse.count) valid frames for TOKEN comparison.\n")
+
+        // Load all 80 stored enrollment records (salt / k2 / token / secretHash)
         guard let storedRecords = LocalEnrollmentCache.shared.loadAll() else {
             print("❌ No enrollment records found in local storage")
 
@@ -290,10 +299,10 @@ extension FaceManager {
         }
 
         print("✅ Loaded 80 enrollment records from storage")
-        print("\n🔄 Starting frame-by-frame verification (BCH + TOKEN)...")
+        print("\n🔄 Starting TOKEN-ONLY frame-by-frame verification...")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
-        // Prebuild RegistrationData once for BCH
+        // Prebuild RegistrationData once for BCH (used only to gate on hashMatch)
         let registrationData: [BCHBiometric.RegistrationData] = storedRecords.map {
             BCHBiometric.RegistrationData(
                 helper: $0.helper,
@@ -302,201 +311,158 @@ extension FaceManager {
             )
         }
 
-        let allowedErrorThreshold = 20.0
-
+        // We are NOT using ECC error thresholds anymore
+        // Everything is based on TOKEN equality only.
         var matchedFramesCount = 0
         var unmatchedFramesCount = 0
-        var detailedResults: [(capturedIndex: Int, matched: Bool, bestErrorPct: Double, matchedStoredIndex: Int?)] = []
 
-        // Toggle to print full 10×80 matrix of match percentages if you want
-        let debugPrintAllPairs = false     // set true if you want every pair printed
-        let debugPrintOnlyMatches = true   // keep detailed logs for matches
+        // For detailed per-frame debug: which stored indices matched
+        var detailedFrameMatches: [(capturedIndex: Int, matched: Bool, matchedStoredIndices: [Int])] = []
 
-        for (capturedIndex, capturedFrame) in validFrames.enumerated() {
+        for (capturedIndex, capturedFrame) in framesToUse.enumerated() {
             let capturedDistances = capturedFrame.map { Double($0) }
 
             var frameMatched = false
-            var bestErrorPct: Double = 100.0
-            var bestMatchIndex: Int? = nil
+            var matchedStoredIndices: [Int] = []
 
-            // Collect all matches under threshold (BCH + token)
-            var matchesWithinThreshold: [(storedIndex: Int, errorPct: Double)] = []
-
-            // Optional: collect all pair errors if you want full 10×80 matrix logging
-            var allPairErrors: [Int: Double] = [:]
+            print("📸 Checking Captured Frame #\(capturedIndex + 1) against 80 stored tokens...")
 
             for (storedIndex, reg) in registrationData.enumerated() {
                 do {
+                    // We only use BCH to gate by hashMatch — no ECC error% logic
                     let result = try BCHShared.verifyBiometric(
                         distances: capturedDistances,
                         registration: reg,
                         index: 0
                     )
 
-                    let errPct = result.totalBitsCompared > 0
-                        ? (Double(result.numErrorsDetected) / Double(result.totalBitsCompared)) * 100.0
-                        : 100.0
+                    // If BCH can't align / decode, skip token check for this pair
+                    guard result.hashMatch else {
+                        // Silent skip for non-matching BCH; uncomment if needed:
+                        // print("   • Stored Frame #\(storedIndex + 1): BCH hashMatch == false (skipping token check)")
+                        continue
+                    } 
 
-                    // Track best (lowest) error% regardless of match state
-                    if errPct < bestErrorPct {
-                        bestErrorPct = errPct
-                        bestMatchIndex = storedIndex
+                    // ---------- TOKEN LAYER (ONLY DECISION SIGNAL) ----------
+                    let rec = storedRecords[storedIndex]
+
+                    let R = rec.secretHash       // stored secret hash
+                    let saltHex = rec.salt
+                    let k2Hex = rec.k2
+                    let storedToken = rec.token
+
+                    // K1' = R XOR SALT
+                    guard let k1Prime = xorHex(R, saltHex) else {
+                        print("   ⚠️ Failed to compute K1' for stored frame #\(storedIndex + 1)")
+                        continue
                     }
 
-                    // Keep full matrix error if desired
-                    allPairErrors[storedIndex] = errPct
+                    // K_recovered = K1' XOR K2
+                    guard let kRecovered = xorHex(k1Prime, k2Hex) else {
+                        print("   ⚠️ Failed to compute K (recovered) for stored frame #\(storedIndex + 1)")
+                        continue
+                    }
 
-                    // ---------- TOKEN LAYER ----------
-                    // Only bother with token if BCH hash + error threshold are OK
-                    if result.hashMatch && errPct <= allowedErrorThreshold {
-                        let rec = storedRecords[storedIndex]
+                    // token' = SHA256(K_recovered || R)
+                    let tokenPrime = sha256Hex(kRecovered + R)
+                    let tokenMatch = (tokenPrime == storedToken)
 
-                        let R = rec.secretHash
-                        let saltHex = rec.salt
-                        let k2Hex = rec.k2
-                        let storedToken = rec.token
-
-                        // K1' = R XOR SALT
-                        guard let k1Prime = xorHex(R, saltHex) else {
-                            print("   ⚠️ Failed to compute K1' for stored frame #\(storedIndex + 1)")
-                            continue
-                        }
-
-                        // K_recovered = K1' XOR K2
-                        guard let kRecovered = xorHex(k1Prime, k2Hex) else {
-                            print("   ⚠️ Failed to compute K (recovered) for stored frame #\(storedIndex + 1)")
-                            continue
-                        }
-
-                        // token' = SHA256(K_recovered || R)
-                        let tokenPrime = sha256Hex(kRecovered + R)
-                        let tokenMatch = (tokenPrime == storedToken)
-
-                        if tokenMatch {
-                            frameMatched = true
-                            matchesWithinThreshold.append((storedIndex: storedIndex, errorPct: errPct))
+                    if tokenMatch {
+                        if !frameMatched {
+                            print("   ✅ TOKEN MATCH for Captured Frame #\(capturedIndex + 1) with Stored Frame #\(storedIndex + 1)")
                         } else {
-                            print("   ⚠️ TOKEN MISMATCH for stored frame #\(storedIndex + 1) despite BCH match")
-                            print("      tokenPrime: \(tokenPrime.prefix(16))...")
-                            print("      storedToken: \(storedToken.prefix(16))...")
+                            print("   ✅ Additional TOKEN MATCH with Stored Frame #\(storedIndex + 1)")
                         }
+
+                        frameMatched = true
+                        matchedStoredIndices.append(storedIndex)
+                    } else {
+                        // For debugging you can log partial token prefixes
+                        // Comment out if too noisy
+                        print("   ⚠️ TOKEN MISMATCH with Stored Frame #\(storedIndex + 1)")
+                        print("      tokenPrime : \(tokenPrime.prefix(16))...")
+                        print("      storedToken: \(storedToken.prefix(16))...")
                     }
-                    // ---------------------------------
+                    // --------------------------------------------------------
 
                 } catch {
-                    // Ignore per-pair failure and continue
+                    print("   ⚠️ BCH verification error for stored frame #\(storedIndex + 1): \(error)")
                     continue
                 }
             }
 
-            // ==== Per-frame logging ====
             if frameMatched {
                 matchedFramesCount += 1
-                detailedResults.append((capturedIndex, true, bestErrorPct, bestMatchIndex))
+                detailedFrameMatches.append((capturedIndex, true, matchedStoredIndices))
 
-                print("✅ Captured Frame #\(capturedIndex + 1): MATCHED (BCH + TOKEN)")
-                if let idx = bestMatchIndex {
-                    print("   └─ Best match: Stored Frame #\(idx + 1)")
-                }
-                print("   └─ Best BCH data-bit error: \(String(format: "%.2f", bestErrorPct))% (threshold: ≤\(allowedErrorThreshold)%)")
-
-                if debugPrintOnlyMatches {
-                    if matchesWithinThreshold.count > 1 {
-                        print("   ├─ Stored frames matched (BCH + TOKEN, ≤\(allowedErrorThreshold)% error):")
-                        for m in matchesWithinThreshold {
-                            let matchPct = max(0.0, 100.0 - m.errorPct)
-                            print("   │   • Stored Frame #\(m.storedIndex + 1): " +
-                                  "\(String(format: "%.2f", matchPct))% match " +
-                                  "(error: \(String(format: "%.2f", m.errorPct))%)")
-                        }
-                    } else if let m = matchesWithinThreshold.first {
-                        let matchPct = max(0.0, 100.0 - m.errorPct)
-                        print("   └─ Stored Frame #\(m.storedIndex + 1): " +
-                              "\(String(format: "%.2f", matchPct))% match " +
-                              "(error: \(String(format: "%.2f", m.errorPct))%)")
-                    }
-                }
-
+                print("✅ RESULT for Captured Frame #\(capturedIndex + 1): TOKEN MATCH FOUND")
+                print("   └─ Matched stored frame indices (1-based): \(matchedStoredIndices.map { $0 + 1 })")
             } else {
                 unmatchedFramesCount += 1
-                detailedResults.append((capturedIndex, false, bestErrorPct, bestMatchIndex))
+                detailedFrameMatches.append((capturedIndex, false, []))
 
-                print("❌ Captured Frame #\(capturedIndex + 1): NOT MATCHED (BCH + TOKEN)")
-                if let idx = bestMatchIndex {
-                    print("   └─ Best attempt: Stored Frame #\(idx + 1)")
-                } else {
-                    print("   └─ Best attempt: N/A")
-                }
-                print("   └─ BCH data-bit error (best): \(String(format: "%.2f", bestErrorPct))% (threshold: ≤\(allowedErrorThreshold)%)")
+                print("❌ RESULT for Captured Frame #\(capturedIndex + 1): NO TOKEN MATCH among 80 stored frames")
             }
 
-            // 🔎 Optional: print full 10×80 matrix for this frame
-            if debugPrintAllPairs {
-                print("   📋 All stored-frame match percents for Captured Frame #\(capturedIndex + 1):")
-                let sortedIndices = allPairErrors.keys.sorted()
-                for idx in sortedIndices {
-                    if let errPct = allPairErrors[idx] {
-                        let matchPct = max(0.0, 100.0 - errPct)
-                        print("   │   • Stored Frame #\(idx + 1): " +
-                              "\(String(format: "%.2f", matchPct))% match " +
-                              "(error: \(String(format: "%.2f", errPct))%)")
-                    }
-                }
-            }
-
-            if (capturedIndex + 1) % 10 == 0 {
-                print("\n--- Progress: \(capturedIndex + 1)/\(validFrames.count) captured frames verified ---\n")
-            }
+            print("----------------------------------------------------\n")
         }
 
         // ==== Summary & aggregated result ====
+        let totalUsedFrames = framesToUse.count
+        let matchPercentageAcrossFrames = (Double(matchedFramesCount) / Double(totalUsedFrames)) * 100.0
 
-        let totalValidFrames = validFrames.count
-        let matchPercentageAcrossFrames = (Double(matchedFramesCount) / Double(totalValidFrames)) * 100.0
-
-        // Require 25% of valid frames to match, minimum 5
-        let requiredMatches = max(Int(Double(totalValidFrames) * 0.25), 5)
+        // ✅ RULE: Session passes if at least 5 frames (out of 10) get a token match
+        let requiredMatches = 5
         let verificationPassed = matchedFramesCount >= requiredMatches
 
         print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("📊 VERIFICATION SUMMARY (BCH + TOKEN):")
+        print("📊 VERIFICATION SUMMARY (TOKEN-ONLY):")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("  Total Frames Captured: \(trimmedFrames.count)")
-        print("  Valid Frames: \(totalValidFrames)")
-        print("  Invalid Frames: \(invalidFrameIndices.count)")
-        print("  ✅ Matched Frames (full): \(matchedFramesCount)/\(totalValidFrames) (\(String(format: "%.1f", matchPercentageAcrossFrames))%)")
-        print("  ❌ Unmatched Frames: \(unmatchedFramesCount)/\(totalValidFrames) (\(String(format: "%.1f", 100.0 - matchPercentageAcrossFrames))%)")
-        print("  📏 Required Matches: ≥\(requiredMatches) frames (25% of valid)")
-        print("  🎯 BCH Error Threshold: ≤\(allowedErrorThreshold)% per frame")
+        print("  Raw Frames Captured: \(trimmedFrames.count)")
+        print("  Valid Frames (distance count OK): \(validFrames.count)")
+        print("  Invalid Frames (distance count mismatch): \(invalidFrameIndices.count)")
+        print("  Frames Used for Token Check: \(totalUsedFrames) (target: \(requiredCollectedFrames))")
+        print("  ✅ Frames with ≥1 TOKEN MATCH: \(matchedFramesCount)/\(totalUsedFrames)  (\(String(format: "%.1f", matchPercentageAcrossFrames))%)")
+        print("  ❌ Frames with NO TOKEN MATCH: \(unmatchedFramesCount)/\(totalUsedFrames)")
+        print("  📏 Required Matched Frames (token): ≥\(requiredMatches) out of \(totalUsedFrames)")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         if verificationPassed {
-            print("  🎉 RESULT: ✅ VERIFICATION PASSED (BCH + TOKEN)")
-            print("     └─ \(matchedFramesCount) frames matched (required: ≥\(requiredMatches))")
+            print("  🎉 RESULT: ✅ VERIFICATION PASSED (TOKEN-ONLY)")
+            print("     └─ \(matchedFramesCount) frames had matching tokens (required: ≥\(requiredMatches))")
         } else {
-            print("  ⛔ RESULT: ❌ VERIFICATION FAILED")
-            print("     └─ Only \(matchedFramesCount) frames matched (required: ≥\(requiredMatches))")
+            print("  ⛔ RESULT: ❌ VERIFICATION FAILED (TOKEN-ONLY)")
+            print("     └─ Only \(matchedFramesCount) frames had matching tokens (required: ≥\(requiredMatches))")
         }
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
-        let matchedErrors = detailedResults.filter { $0.matched }.map { $0.bestErrorPct }
-        let avgMatchedError = matchedErrors.isEmpty ? 0.0 : matchedErrors.reduce(0.0, +) / Double(matchedErrors.count)
+        print("📈 FRAME-BY-FRAME TOKEN MATCH DETAILS:")
+        for info in detailedFrameMatches {
+            let frameNumber = info.capturedIndex + 1
+            if info.matched {
+                let indicesString = info.matchedStoredIndices
+                    .map { "#\($0 + 1)" }
+                    .joined(separator: ", ")
+                print("  • Captured Frame #\(frameNumber): ✅ MATCHED (stored frames: \(indicesString))")
+            } else {
+                print("  • Captured Frame #\(frameNumber): ❌ NO TOKEN MATCH")
+            }
+        }
 
-        print("📈 DETAILED STATISTICS:")
-        print("  Average BCH Error (Matched Frames): \(String(format: "%.2f", avgMatchedError))%")
-        print("  Match Success Rate (Frames, full): \(String(format: "%.1f", matchPercentageAcrossFrames))%")
-        print("  Verification Status: \(verificationPassed ? "✅ PASS" : "❌ FAIL")")
-        print("\n🔍 ========== VERIFICATION COMPLETED ==========\n")
+        print("\n🔍 ========== VERIFICATION (TOKEN-ONLY) COMPLETED ==========\n")
 
+        // Build aggregated result object (ECC-related fields are neutral now)
         let aggregated = BCHBiometric.VerificationResult(
             success: verificationPassed,
-            matchPercentage: matchPercentageAcrossFrames,        // across frames (BCH + token)
+            matchPercentage: matchPercentageAcrossFrames, // across frames (token-only)
             registrationIndex: 0,
-            hashMatch: verificationPassed,                       // session-level pass/fail
+            hashMatch: verificationPassed,                // session-level pass/fail
             storedHashPreview: "",
             recoveredHashPreview: "",
-            numErrorsDetected: unmatchedFramesCount,             // number of frames that failed (telemetry)
-            totalBitsCompared: totalValidFrames,                 // number of frames assessed
-            notes: "Aggregated verification over \(totalValidFrames) frames; matched \(matchedFramesCount); required ≥\(requiredMatches); per-frame BCH error threshold ≤\(allowedErrorThreshold)%. Includes token check using SALT + K2 + R."
+            numErrorsDetected: 0,                         // ECC bits not used
+            totalBitsCompared: 0,                         // ECC bits not used
+            notes: "Token-only session verification over \(totalUsedFrames) frames; " +
+                   "frames with ≥1 token match: \(matchedFramesCount); " +
+                   "required ≥\(requiredMatches). ECC bit error thresholds are DISABLED; BCH is used only as a hashMatch gate before token comparison."
         )
 
         DispatchQueue.main.async {
@@ -504,4 +470,3 @@ extension FaceManager {
         }
     }
 }
-
