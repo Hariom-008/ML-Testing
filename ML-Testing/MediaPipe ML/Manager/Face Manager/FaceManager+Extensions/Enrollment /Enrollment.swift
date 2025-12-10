@@ -226,11 +226,9 @@ extension FaceManager {
 
     /// Token-only verification:
     /// - Capture ~10 frames
-    /// - For each captured frame, try to find ANY stored frame (out of 80) whose token matches
-    /// - A frame is considered MATCHED if:
-    ///       BCH hashMatch == true   (we only use this as a gate, no ECC error thresholds)
-    ///       AND token' == stored token (using SALT + K2 + R from the stored record)
-    /// - Session passes if at least 5 frames (out of the 10) have ≥1 token match.
+    /// - For each captured frame, loop over 80 stored records:
+    ///       If we get even ONE token match, that frame is marked as MATCHED and we break.
+    /// - Session passes if at least 5 out of 10 frames have ≥1 token match.
     func verifyFaceIDAgainstLocal(
         completion: @escaping (Result<BCHBiometric.VerificationResult, Error>) -> Void
     ) {
@@ -240,7 +238,7 @@ extension FaceManager {
         let trimmedFrames = VerifyFrameDistanceArray()
         print("📊 Captured \(trimmedFrames.count) frames total (raw)")
 
-        // Filter valid frames
+        // Filter valid frames by distance count
         var validFrames: [[Float]] = []
         var invalidFrameIndices: [Int] = []
 
@@ -279,7 +277,7 @@ extension FaceManager {
         let framesToUse = Array(validFrames.prefix(requiredCollectedFrames))
         print("🎯 Using first \(framesToUse.count) valid frames for TOKEN comparison.\n")
 
-        // Load all 80 stored enrollment records (salt / k2 / token / secretHash)
+        // Load all 80 stored enrollment records
         guard let storedRecords = LocalEnrollmentCache.shared.loadAll() else {
             print("❌ No enrollment records found in local storage")
 
@@ -302,7 +300,7 @@ extension FaceManager {
         print("\n🔄 Starting TOKEN-ONLY frame-by-frame verification...")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
-        // Prebuild RegistrationData once for BCH (used only to gate on hashMatch)
+        // Prebuild RegistrationData once for BCH (used only as hashMatch gate)
         let registrationData: [BCHBiometric.RegistrationData] = storedRecords.map {
             BCHBiometric.RegistrationData(
                 helper: $0.helper,
@@ -311,25 +309,24 @@ extension FaceManager {
             )
         }
 
-        // We are NOT using ECC error thresholds anymore
-        // Everything is based on TOKEN equality only.
         var matchedFramesCount = 0
         var unmatchedFramesCount = 0
 
-        // For detailed per-frame debug: which stored indices matched
-        var detailedFrameMatches: [(capturedIndex: Int, matched: Bool, matchedStoredIndices: [Int])] = []
+        // For debug: which stored index matched for each captured frame (at most 1)
+        var detailedFrameMatches: [(capturedIndex: Int, matched: Bool, matchedStoredIndex: Int?)] = []
 
         for (capturedIndex, capturedFrame) in framesToUse.enumerated() {
             let capturedDistances = capturedFrame.map { Double($0) }
 
             var frameMatched = false
-            var matchedStoredIndices: [Int] = []
+            var matchedStoredIndex: Int? = nil
 
             print("📸 Checking Captured Frame #\(capturedIndex + 1) against 80 stored tokens...")
 
+            // Loop over all stored frames; break on FIRST token match
             for (storedIndex, reg) in registrationData.enumerated() {
                 do {
-                    // We only use BCH to gate by hashMatch — no ECC error% logic
+                    // BCH used only as a gate via hashMatch
                     let result = try BCHShared.verifyBiometric(
                         distances: capturedDistances,
                         registration: reg,
@@ -338,15 +335,13 @@ extension FaceManager {
 
                     // If BCH can't align / decode, skip token check for this pair
                     guard result.hashMatch else {
-                        // Silent skip for non-matching BCH; uncomment if needed:
-                        // print("   • Stored Frame #\(storedIndex + 1): BCH hashMatch == false (skipping token check)")
                         continue
-                    } 
+                    }
 
                     // ---------- TOKEN LAYER (ONLY DECISION SIGNAL) ----------
                     let rec = storedRecords[storedIndex]
 
-                    let R = rec.secretHash       // stored secret hash
+                    let R = rec.secretHash       // stored secret hash (for this record)
                     let saltHex = rec.salt
                     let k2Hex = rec.k2
                     let storedToken = rec.token
@@ -368,20 +363,13 @@ extension FaceManager {
                     let tokenMatch = (tokenPrime == storedToken)
 
                     if tokenMatch {
-                        if !frameMatched {
-                            print("   ✅ TOKEN MATCH for Captured Frame #\(capturedIndex + 1) with Stored Frame #\(storedIndex + 1)")
-                        } else {
-                            print("   ✅ Additional TOKEN MATCH with Stored Frame #\(storedIndex + 1)")
-                        }
-
                         frameMatched = true
-                        matchedStoredIndices.append(storedIndex)
-                    } else {
-                        // For debugging you can log partial token prefixes
-                        // Comment out if too noisy
-                        print("   ⚠️ TOKEN MISMATCH with Stored Frame #\(storedIndex + 1)")
-                        print("      tokenPrime : \(tokenPrime.prefix(16))...")
-                        print("      storedToken: \(storedToken.prefix(16))...")
+                        matchedStoredIndex = storedIndex
+
+                        print("   ✅ TOKEN MATCH for Captured Frame #\(capturedIndex + 1)")
+                        print("      └─ Matched Stored Frame #\(storedIndex + 1)")
+                        // 🔴 IMPORTANT: break on first token match for this captured frame
+                        break
                     }
                     // --------------------------------------------------------
 
@@ -393,13 +381,16 @@ extension FaceManager {
 
             if frameMatched {
                 matchedFramesCount += 1
-                detailedFrameMatches.append((capturedIndex, true, matchedStoredIndices))
+                detailedFrameMatches.append((capturedIndex, true, matchedStoredIndex))
 
-                print("✅ RESULT for Captured Frame #\(capturedIndex + 1): TOKEN MATCH FOUND")
-                print("   └─ Matched stored frame indices (1-based): \(matchedStoredIndices.map { $0 + 1 })")
+                if let idx = matchedStoredIndex {
+                    print("✅ RESULT for Captured Frame #\(capturedIndex + 1): MATCHED via token (Stored Frame #\(idx + 1))")
+                } else {
+                    print("✅ RESULT for Captured Frame #\(capturedIndex + 1): MATCHED via token (Stored index: unknown)")
+                }
             } else {
                 unmatchedFramesCount += 1
-                detailedFrameMatches.append((capturedIndex, false, []))
+                detailedFrameMatches.append((capturedIndex, false, nil))
 
                 print("❌ RESULT for Captured Frame #\(capturedIndex + 1): NO TOKEN MATCH among 80 stored frames")
             }
@@ -411,7 +402,7 @@ extension FaceManager {
         let totalUsedFrames = framesToUse.count
         let matchPercentageAcrossFrames = (Double(matchedFramesCount) / Double(totalUsedFrames)) * 100.0
 
-        // ✅ RULE: Session passes if at least 5 frames (out of 10) get a token match
+        // RULE: Session passes if at least 5 frames (out of 10) get a token match
         let requiredMatches = 5
         let verificationPassed = matchedFramesCount >= requiredMatches
 
@@ -438,11 +429,8 @@ extension FaceManager {
         print("📈 FRAME-BY-FRAME TOKEN MATCH DETAILS:")
         for info in detailedFrameMatches {
             let frameNumber = info.capturedIndex + 1
-            if info.matched {
-                let indicesString = info.matchedStoredIndices
-                    .map { "#\($0 + 1)" }
-                    .joined(separator: ", ")
-                print("  • Captured Frame #\(frameNumber): ✅ MATCHED (stored frames: \(indicesString))")
+            if info.matched, let idx = info.matchedStoredIndex {
+                print("  • Captured Frame #\(frameNumber): ✅ MATCHED (Stored Frame #\(idx + 1))")
             } else {
                 print("  • Captured Frame #\(frameNumber): ❌ NO TOKEN MATCH")
             }
@@ -450,7 +438,7 @@ extension FaceManager {
 
         print("\n🔍 ========== VERIFICATION (TOKEN-ONLY) COMPLETED ==========\n")
 
-        // Build aggregated result object (ECC-related fields are neutral now)
+        // Aggregated result (ECC metrics unused here)
         let aggregated = BCHBiometric.VerificationResult(
             success: verificationPassed,
             matchPercentage: matchPercentageAcrossFrames, // across frames (token-only)
@@ -462,7 +450,8 @@ extension FaceManager {
             totalBitsCompared: 0,                         // ECC bits not used
             notes: "Token-only session verification over \(totalUsedFrames) frames; " +
                    "frames with ≥1 token match: \(matchedFramesCount); " +
-                   "required ≥\(requiredMatches). ECC bit error thresholds are DISABLED; BCH is used only as a hashMatch gate before token comparison."
+                   "required ≥\(requiredMatches). BCH is used only for hashMatch gating; " +
+                   "ECC bit error thresholds are not part of the decision."
         )
 
         DispatchQueue.main.async {
