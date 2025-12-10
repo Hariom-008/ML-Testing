@@ -12,6 +12,8 @@ final class FaceManager: NSObject, ObservableObject {
     // MARK: - Dependencies
     let cameraSpecManager: CameraSpecManager
     
+    private let bchQueue = DispatchQueue(label: "FaceManager.BCH", qos: .userInitiated)
+    
     // MARK: - Published UI Properties
     @Published var imageSize: CGSize = .zero
     @Published var NormalizedPoints: [(x: Float, y: Float)] = []
@@ -80,6 +82,7 @@ final class FaceManager: NSObject, ObservableObject {
     
     var landmarkDistanceLists: [[Float]] = []
     @Published var AllFramesOptionalAndMandatoryDistance: [[Float]] = []
+    
     
     // MARK: - Camera Components
     var previewLayer: AVCaptureVideoPreviewLayer?
