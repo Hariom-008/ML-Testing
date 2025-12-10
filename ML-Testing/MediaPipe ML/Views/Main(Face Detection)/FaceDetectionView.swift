@@ -11,8 +11,6 @@ struct FaceDetectionView: View {
     @State private var savedFrameCount: Int = 0
     private let maxSavedFrames = 30
     
-    let deviceKey = "12345678a"
-    
     // ✅ CORRECT: Both created as StateObjects
     @StateObject private var faceManager: FaceManager
     @StateObject private var cameraSpecManager: CameraSpecManager
@@ -46,7 +44,6 @@ struct FaceDetectionView: View {
     @State private var alertMessage: String = ""
     @State private var isProcessing: Bool = false
     
-    private let hmacGenerator = HMACGenerator.self
     
     init(onComplete: @escaping () -> Void) {
         let camSpecManager = CameraSpecManager()
@@ -227,7 +224,6 @@ struct FaceDetectionView: View {
                     .padding(.bottom, 40)
                 }
             }
-            // EAR feed (cheap, per-frame is OK)
             .onChange(of: faceManager.EAR) { newEAR in
                 var s = earSeries
                 s.append(CGFloat(newEAR))
@@ -239,7 +235,6 @@ struct FaceDetectionView: View {
             .onReceive(faceManager.$NormalizedPoints) { _ in
                 faceManager.updateNoseTipCenterStatusFromCalcCoords()
             }
-            // Pose feed from NormalizedPoints – throttled to ~10 Hz
             .onReceive(
                 faceManager.$NormalizedPoints
                     .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
